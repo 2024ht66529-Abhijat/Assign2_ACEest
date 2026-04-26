@@ -4,7 +4,7 @@ pipeline {
     environment {
         DOCKER_REPO    = "2024ht66529/aceestver"
         // Dynamically set version based on Git Tag, else Branch Name
-        APP_VERSION    = sh(script: "git describe --tags --always || echo ${env.BRANCH_NAME}", returnStdout: true).trim()
+        APP_VERSION = sh(script: "git tag --points-at HEAD || echo ${env.BRANCH_NAME}", returnStdout: true).trim()
         KUBECONFIG     = "/home/abhij/.kube/config"
         MINIKUBE_HOME = "/home/abhij/.minikube"
         PATH          = "/usr/local/bin:${env.PATH}"
@@ -61,13 +61,15 @@ pipeline {
             # Update local K8s manifest to use the new version tag
             sed -i "s|image: ${DOCKER_REPO}:.*|image: ${DOCKER_REPO}:${APP_VERSION}|g" k8s/base/deployment.yaml
             sed -i "s|\\${APP_VERSION}|${APP_VERSION}|g" k8s/base/deployment.yaml     
-            minikube start --driver=docker --container-runtime=containerd                                      
+            minikube start --driver=docker --container-runtime=containerd --force                                    
             kubectl apply -f k8s/base/deployment.yaml
             kubectl apply -f k8s/base/services.yaml
             
+            kubectl apply -f k8s/base/deployment.yaml --validate=false
+            kubectl apply -f k8s/base/services.yaml --validate=false
+
             kubectl rollout status deployment/aceestver --timeout=120s
 
-                   
             echo "🌐 Starting minikube tunnel..."
             nohup minikube tunnel --cleanup > /dev/null 2>&1 &
             sleep 10
