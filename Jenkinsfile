@@ -2,15 +2,16 @@ pipeline {
     agent any
 
     environment {
-    DOCKER_REPO    = "2024ht66529/aceestver"
-    APP_VERSION    = sh(script: "git tag --points-at HEAD || echo ${env.BRANCH_NAME}", returnStdout: true).trim()
-    NODE_PORT      = "30080"
-    // FIX: Added .254 to the IP address
-    PUBLIC_IP      = sh(script: '''
-        TOKEN=$(curl -s -X PUT "http://169.254.169" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
-        curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169 || curl -s ifconfig.me
-    ''', returnStdout: true).trim()
-}
+        DOCKER_REPO = "2024ht66529/aceestver"
+        APP_VERSION = sh(script: "git tag --points-at HEAD || echo ${env.BRANCH_NAME}", returnStdout: true).trim()
+        NODE_PORT   = "30080"
+        PUBLIC_IP   = sh(script: '''
+            TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" \
+                -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+            curl -s -H "X-aws-ec2-metadata-token: $TOKEN" \
+                http://169.254.169.254/latest/meta-data/public-ipv4 || curl -s ifconfig.me
+        ''', returnStdout: true).trim()
+    }
 
     stages {
         stage('Initialize & Versioning') {
@@ -27,30 +28,31 @@ pipeline {
         }
 
         stage('AWS Infrastructure Prep') {
-        steps {
-        withCredentials([usernamePassword(credentialsId: 'aws-creds', 
-                                          usernameVariable: 'AWS_ACCESS_KEY_ID', 
-                                          passwordVariable: 'AWS_SECRET_ACCESS_KEY')]) {
-            script {
-                // FIX: Added .254 to the IP address
-                def instanceId = sh(script: '''
-                    TOKEN=$(curl -s -X PUT "http://169.254.169" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
-                    curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169
-                ''', returnStdout: true).trim()
-                
-                def sgId = sh(script: "aws ec2 describe-instances --instance-ids ${instanceId} --query 'Reservations[0].Instances[0].SecurityGroups[0].GroupId' --output text", returnStdout: true).trim()
-                
-                echo "🔓 Opening Port ${NODE_PORT} on SG: ${sgId}"
-                sh "aws ec2 authorize-security-group-ingress --group-id ${sgId} --protocol tcp --port ${NODE_PORT} --cidr 0.0.0.0/0 || true"
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'aws-creds',
+                                                  usernameVariable: 'AWS_ACCESS_KEY_ID',
+                                                  passwordVariable: 'AWS_SECRET_ACCESS_KEY')]) {
+                    script {
+                        def instanceId = sh(script: '''
+                            TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" \
+                                -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+                            curl -s -H "X-aws-ec2-metadata-token: $TOKEN" \
+                                http://169.254.169.254/latest/meta-data/instance-id
+                        ''', returnStdout: true).trim()
+
+                        def sgId = sh(script: "aws ec2 describe-instances --instance-ids ${instanceId} --query 'Reservations[0].Instances[0].SecurityGroups[0].GroupId' --output text", returnStdout: true).trim()
+
+                        echo "🔓 Opening Port ${NODE_PORT} on SG: ${sgId}"
+                        sh "aws ec2 authorize-security-group-ingress --group-id ${sgId} --protocol tcp --port ${NODE_PORT} --cidr 0.0.0.0/0 || true"
+                    }
+                }
             }
-        }
-    }
         }
 
         stage('Docker Hub Login') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', 
-                                                  usernameVariable: 'DOCKER_USER', 
+                withCredentials([usernamePassword(credentialsId: 'dockerhub-creds',
+                                                  usernameVariable: 'DOCKER_USER',
                                                   passwordVariable: 'DOCKER_PASS')]) {
                     sh "echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin"
                 }
@@ -80,12 +82,12 @@ pipeline {
             steps {
                 sh '''
                     sed -i "s|image: ${DOCKER_REPO}:.*|image: ${DOCKER_REPO}:${APP_VERSION}|g" k8s/base/deployment.yaml
-                    sed -i "s|\\${APP_VERSION}|${APP_VERSION}|g" k8s/base/deployment.yaml     
-                    minikube start --driver=docker --ports=30080:30080                                           
+                    sed -i "s|\\${APP_VERSION}|${APP_VERSION}|g" k8s/base/deployment.yaml
+                    minikube start --driver=docker --ports=30080:30080
                     kubectl apply -f k8s/base/deployment.yaml --validate=false
                     kubectl apply -f k8s/base/services.yaml --validate=false
                     kubectl rollout status deployment/aceestver --timeout=120s
-                '''      
+                '''
             }
         }
 
