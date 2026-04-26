@@ -3,11 +3,13 @@ pipeline {
 
     environment {
         DOCKER_REPO    = "2024ht66529/aceestver"
-        // Dynamically set version based on Git Tag, else Branch Name
-        APP_VERSION = sh(script: "git tag --points-at HEAD || echo ${env.BRANCH_NAME}", returnStdout: true).trim()
-        KUBECONFIG     = "/home/abhij/.kube/config"
-        MINIKUBE_HOME = "/home/abhij/.minikube"
-        PATH          = "/usr/local/bin:${env.PATH}"
+        APP_VERSION    = sh(script: "git tag --points-at HEAD || echo ${env.BRANCH_NAME}", returnStdout: true).trim()
+        NODE_PORT      = "30080"
+        // Fetch IMDSv2 Token and then the Public IP
+        PUBLIC_IP      = sh(script: '''
+            TOKEN=$(curl -s -X PUT "http://169.254.169" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+            curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169 || curl -s ifconfig.me
+        ''', returnStdout: true).trim()
     }
 
     stages {
@@ -24,6 +26,28 @@ pipeline {
             }
         }
 
+        stage('AWS Infrastructure Prep') {
+            steps {
+             // This wrapper automatically exports AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY
+            withCredentials([usernamePassword(credentialsId: 'aws-creds', 
+                                          usernameVariable: 'AWS_ACCESS_KEY_ID', 
+                                          passwordVariable: 'AWS_SECRET_ACCESS_KEY')]) {
+            script {
+                // Fetch IMDSv2 Token
+                def instanceId = sh(script: '''
+                    TOKEN=$(curl -s -X PUT "http://169.254.169" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+                    curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169
+                ''', returnStdout: true).trim()
+                
+                def sgId = sh(script: "aws ec2 describe-instances --instance-ids ${instanceId} --query 'Reservations.Instances.SecurityGroups.GroupId' --output text", returnStdout: true).trim()
+                
+                echo "🔓 Authenticated via IAM User. Opening Port ${NODE_PORT} on SG: ${sgId}"
+                sh "aws ec2 authorize-security-group-ingress --group-id ${sgId} --protocol tcp --port ${NODE_PORT} --cidr 0.0.0.0/0 || true"
+            }
+        }
+    }
+   }
+
         stage('Docker Hub Login') {
             steps {
                 withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', 
@@ -36,9 +60,7 @@ pipeline {
 
         stage('Build & Test Image') {
             steps {
-                // Build with specific version tag
                 sh "docker build -t ${DOCKER_REPO}:${APP_VERSION} ."
-                // Run tests inside the built container to ensure binary integrity
                 sh "docker run --rm ${DOCKER_REPO}:${APP_VERSION} pytest"
             }
         }
@@ -56,43 +78,39 @@ pipeline {
         }
 
         stage('Deploy to Minikube') {
-    steps {
-        sh '''
-            # Update local K8s manifest to use the new version tag
-            sed -i "s|image: ${DOCKER_REPO}:.*|image: ${DOCKER_REPO}:${APP_VERSION}|g" k8s/base/deployment.yaml
-            sed -i "s|\\${APP_VERSION}|${APP_VERSION}|g" k8s/base/deployment.yaml     
-            minikube start --driver=docker --container-runtime=containerd --force                                    
-            kubectl apply -f k8s/base/deployment.yaml
-            kubectl apply -f k8s/base/services.yaml
-            
-            kubectl apply -f k8s/base/deployment.yaml --validate=false
-            kubectl apply -f k8s/base/services.yaml --validate=false
+            steps {
+                sh '''
+                    sed -i "s|image: ${DOCKER_REPO}:.*|image: ${DOCKER_REPO}:${APP_VERSION}|g" k8s/base/deployment.yaml
+                    sed -i "s|\\${APP_VERSION}|${APP_VERSION}|g" k8s/base/deployment.yaml     
+                    minikube start --driver=docker --ports=30080:30080                                           
+                    kubectl apply -f k8s/base/deployment.yaml --validate=false
+                    kubectl apply -f k8s/base/services.yaml --validate=false
+                    kubectl rollout status deployment/aceestver --timeout=120s
+                '''      
+            }
+        }
 
-            kubectl rollout status deployment/aceestver --timeout=120s
-
-            echo "🌐 Starting minikube tunnel..."
-            nohup minikube tunnel --cleanup > /dev/null 2>&1 &
-            sleep 10
-                     
-            echo "🌐 Application is accessible at:"
-            minikube service aceestver-service --url 
-        '''      
+        stage('Verify via AWS Public IP') {
+            steps {
+                script {
+                    try {
+                        echo "🔍 Verifying application at http://${PUBLIC_IP}:${NODE_PORT}"
+                        sh "curl -f --connect-timeout 15 http://${PUBLIC_IP}:${NODE_PORT}/login"
+                    } catch (Exception e) {
+                        error "❌ Health Check Failed at Cloud Edge! Triggering Rollback..."
+                    }
+                }
+            }
+        }
     }
-}
-}
 
     post {
-        always {
-            sh '''
-                echo "📊 Cluster state snapshot:"
-                kubectl get pods -A || true
-
-
-            '''
-        }
-        success {
-            echo "✅ Build and rollout successful"
-
+        failure {
+            script {
+                echo "⚠️ Rollback initiated: Reverting to last stable version..."
+                sh 'kubectl rollout undo deployment/aceestver'
+                sh 'kubectl rollout status deployment/aceestver --timeout=60s'
+            }
         }
     }
 }
