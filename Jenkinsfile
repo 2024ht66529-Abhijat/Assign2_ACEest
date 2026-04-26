@@ -61,7 +61,7 @@ pipeline {
                 sh '''
                     # Update local K8s manifest to use the new version tag
                     sed -i "s|image: ${DOCKER_REPO}:.*|image: ${DOCKER_REPO}:${APP_VERSION}|g" k8s/base/deployment.yaml
-                    
+                    sed -i "s|\\${APP_VERSION}|${APP_VERSION}|g" k8s/base/deployment.yaml                    
                     minikube start --driver=docker --container-runtime=containerd
                     kubectl apply -f k8s/base/deployment.yaml
                     kubectl apply -f k8s/base/services.yaml
@@ -106,17 +106,10 @@ pipeline {
             script {
                 echo "⚠️ Rollback initiated due to stage failure..."
                 sh '''
-                    # Revert to the last successful deployment
-                    kubectl rollout undo deployment/aceestver
-                    
-                    # Confirm status of reverted version
-                    kubectl rollout status deployment/aceestver --timeout=60s
-                    echo "♻️ Successfully rolled back to the previous stable version."
+                    # Attempt rollback, but don't crash if there's no history
+                    kubectl rollout undo deployment/aceestver || echo "No previous deployment found to roll back to."
                 '''
             }
-        }
-        success {
-            echo "🎊 Deployment and Verification successful!"
         }
     }
 }
