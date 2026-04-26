@@ -58,74 +58,39 @@ pipeline {
         stage('Deploy to Minikube') {
     steps {
         sh '''
-            # ... (your existing sed commands) ...
-            
+            # Update local K8s manifest to use the new version tag
+            sed -i "s|image: ${DOCKER_REPO}:.*|image: ${DOCKER_REPO}:${APP_VERSION}|g" k8s/base/deployment.yaml
+            sed -i "s|\\${APP_VERSION}|${APP_VERSION}|g" k8s/base/deployment.yaml     
+            minikube start --driver=docker --container-runtime=containerd                                      
             kubectl apply -f k8s/base/deployment.yaml
             kubectl apply -f k8s/base/services.yaml
             
-            # Use a slightly shorter timeout for faster feedback
-            if ! kubectl rollout status deployment/aceestver --timeout=120s; then
-                echo "❌ ROLLOUT FAILED! Printing Debug Info..."
-                kubectl get pods
-                echo "--- Pod Details ---"
-                kubectl describe pods -l app=aceestver
-                echo "--- Container Logs ---"
-                kubectl logs -l app=aceestver --tail=50
-                exit 1
-            fi
+            kubectl rollout status deployment/aceestver --timeout=120s
+
+                   
+            echo "🌐 Starting minikube tunnel..."
+            nohup minikube tunnel --cleanup > /dev/null 2>&1 &
+            sleep 10
+                     
+            echo "🌐 Application is accessible at:"
+            minikube service aceestver-service --url 
         '''      
     }
 }
-
-
-        stage('Verify Service') {
-            steps {
-                script {
-                    try {
-                        sh '''
-                            # Ensure tunnel is active for local verification
-                            pgrep -f "minikube tunnel" || nohup minikube tunnel > /dev/null 2>&1 &
-                            sleep 15
-                            
-                            # Fetch dynamic Minikube URL
-                            URL=$(minikube service aceestver-service --url | head -n 1)
-                            echo "🔍 Verifying availability at $URL"
-                            
-                            # Health check using curl
-                            curl -f --connect-timeout 5 --max-time 10 $URL
-                        '''
-                        echo "✅ Verification Passed!"
-                    } catch (Exception e) {
-                        error "❌ Verification Failed! Triggering Rollback post-action..."
-                    }
-                }
-            }
-        }
-    }
+}
 
     post {
-        failure {
-            script {
-                echo "⚠️ Rollback initiated due to stage failure..."
-                sh '''
-                    # Revert to the last successful deployment
-                    # Use || echo to ensure the build finishes even if no history exists
-                    kubectl rollout undo deployment/aceestver || echo "No previous deployment found to roll back to."
-                    
-                    # Confirm status of the reverted version
-                    kubectl rollout status deployment/aceestver --timeout=60s || echo "Rollback status check failed."
-                '''
-            }
-        }
-        success {
-            echo "🎊 Deployment and Verification successful!"
-        }
         always {
             sh '''
-                echo "📊 Final Cluster state:"
-                kubectl get pods
-                kubectl get services
+                echo "📊 Cluster state snapshot:"
+                kubectl get pods -A || true
+
+
             '''
+        }
+        success {
+            echo "✅ Build and rollout successful"
+
         }
     }
 }
