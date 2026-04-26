@@ -1,8 +1,0 @@
-metadata:
-  name: aceestver-blue
-spec:
-  template:
-    metadata:
-      labels:
-        app: aceestver
-        version: blue

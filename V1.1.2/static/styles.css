@@ -1,6 +1,0 @@
-body { background-color: #1a1a1a; color: white; font-family: Arial; }
-header { background-color: #d4af37; color: black; text-align: center; padding: 20px; font-weight: bold; }
-.container { display: flex; flex-direction: column; align-items: center; margin: 20px; }
-form, table { background-color: #333; padding: 20px; border-radius: 10px; color: white; }
-button, a { background-color: #d4af37; color: black; padding: 10px; margin: 5px; border: none; cursor: pointer; }
-.calories { color: #d4af37; font-weight: bold; }

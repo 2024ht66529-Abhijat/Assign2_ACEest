@@ -1,4 +1,0 @@
-spec:
-  selector:
-    app: aceestver
-    version: green   # switch back to blue for rollback
