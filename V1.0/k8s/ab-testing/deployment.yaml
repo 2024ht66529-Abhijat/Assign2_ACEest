@@ -1,0 +1,6 @@
+rules:
+- http:
+    paths:
+    - backend:
+        serviceName: aceestver-v1
+      condition: cookie=version1

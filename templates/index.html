@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ACEest Fitness and Gym</title>
+    <style>
+        :root {
+            --gold: #d4af37;
+            --dark-bg: #1a1a1a;
+            --panel-bg: #262626;
+            --text-white: #ffffff;
+            --muted-text: #ddd;
+        }
+
+        body {
+            background-color: var(--dark-bg);
+            color: var(--text-white);
+            font-family: 'Helvetica', Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+        }
+
+        /* Header Style */
+        .header {
+            background-color: var(--gold);
+            color: black;
+            padding: 20px;
+            text-align: center;
+            font-weight: bold;
+            font-size: 28px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        /* Layout Container */
+        .main-container {
+            display: grid;
+            grid-template-columns: 320px 1fr;
+            gap: 20px;
+            padding: 30px;
+            max-width: 1400px;
+            margin: auto;
+        }
+
+        /* Left Panel Styling */
+        .left-panel {
+            border: 2px solid var(--gold);
+            padding: 20px;
+            background: var(--panel-bg);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            height: fit-content;
+            min-height: 500px;
+        }
+
+        .panel-title {
+            color: var(--gold);
+            font-weight: bold;
+            font-size: 18px;
+            margin-bottom: 20px;
+            text-align: center;
+            border-bottom: 1px solid var(--gold);
+            padding-bottom: 10px;
+        }
+
+        .control-group {
+            margin-bottom: 30px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 10px;
+        }
+
+        select {
+            width: 100%;
+            padding: 12px;
+            background: #333;
+            color: white;
+            border: 1px solid var(--gold);
+            border-radius: 4px;
+            font-size: 16px;
+        }
+
+        /* Metrics Box */
+        .metrics {
+            background: #111;
+            color: #00ff00; /* Neon green for a 'terminal' feel */
+            font-family: 'Courier New', Courier, monospace;
+            padding: 15px;
+            font-size: 13px;
+            line-height: 1.5;
+            border: 1px solid #333;
+        }
+
+        /* Right Panel Styling */
+        .right-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .display-box {
+            border: 1px solid var(--gold);
+            background: var(--panel-bg);
+            padding: 20px;
+            min-height: 200px;
+        }
+
+        .box-header {
+            color: var(--gold);
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            border-left: 4px solid var(--gold);
+            padding-left: 10px;
+        }
+
+        /* CRITICAL: This ensures \n in your strings results in actual new lines */
+        .content-text {
+            white-space: pre-wrap; 
+            line-height: 1.8;
+            font-size: 16px;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="header">ACEest FUNCTIONAL FITNESS</div>
+
+    <div class="main-container">
+        <!-- Left Column -->
+        <div class="left-panel">
+            <div>
+                <div class="panel-title">Client Profile</div>
+                <div class="control-group">
+                    <label for="progSelect">Select Program:</label>
+                    <select id="progSelect" onchange="updateDisplay()">
+                        <option value="">-- Select --</option>
+                        {% for name in programs %}
+                        <option value="{{ name }}">{{ name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div class="metrics">
+CAPACITY: 150 Users
+AREA: 10,000 sq ft
+BREAK-EVEN: 250 Members
+            </div>
+        </div>
+
+        <!-- Right Column -->
+        <div class="right-panel">
+            <div class="display-box">
+                <div class="box-header">Weekly Workout Chart</div>
+                <div id="workoutText" class="content-text">Select a profile from the left to view the personalized workout plan.</div>
+            </div>
+
+            <div class="display-box">
+                <div class="box-header">Daily Nutrition Plan (Tamil Nadu Context)</div>
+                <div id="dietText" class="content-text">Select a profile from the left to view the diet guidelines.</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function updateDisplay() {
+            const val = document.getElementById('progSelect').value;
+            const workoutEl = document.getElementById('workoutText');
+            const dietEl = document.getElementById('dietText');
+
+            // Handle the empty/default selection
+            if (!val) {
+                workoutEl.innerText = "Select a profile from the left to view the personalized workout plan.";
+                workoutEl.style.color = "white";
+                dietEl.innerText = "Select a profile from the left to view the diet guidelines.";
+                return;
+            }
+            
+            try {
+                // Encode the name to handle spaces and parentheses in the URL
+                const response = await fetch(`/get_plan/${encodeURIComponent(val)}`);
+                
+                if (!response.ok) {
+                    throw new Error("Could not fetch data");
+                }
+
+                const data = await response.json();
+                
+                // Update Workout Text and Color
+                workoutEl.innerText = data.workout;
+                workoutEl.style.color = data.color; // e.g., #e74c3c for Fat Loss
+                
+                // Update Diet Text
+                dietEl.innerText = data.diet;
+                
+            } catch (error) {
+                console.error("Error:", error);
+                workoutEl.innerText = "Error loading data.";
+                dietEl.innerText = "";
+            }
+        }
+    </script>
+</body>
+</html>

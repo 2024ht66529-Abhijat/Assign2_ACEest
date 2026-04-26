@@ -1,0 +1,8 @@
+metadata:
+  name: aceestver-shadow
+spec:
+  template:
+    spec:
+      containers:
+      - name: aceestver
+        image: dockerhub-username/aceestver:1.1

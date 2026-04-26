@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>ACEest Fitness and Gym</title>
+    <style>
+        :root { --gold: #d4af37; --dark: #1a1a1a; }
+        body { background-color: var(--dark); color: white; font-family: Helvetica, sans-serif; margin: 0; }
+        .header { background-color: var(--gold); color: black; padding: 20px; text-align: center; font-weight: bold; font-size: 24px; }
+        
+        .main-container { display: grid; grid-template-columns: 300px 1fr; gap: 20px; padding: 20px; }
+        
+        /* Left Panel */
+        .left-panel { border: 2px solid var(--gold); padding: 15px; display: flex; flex-direction: column; justify-content: space-between; height: 80vh; }
+        .metrics { background: #333; color: #ddd; font-family: Courier; padding: 10px; font-size: 13px; white-space: pre-wrap; }
+
+        /* Right Panel */
+        .panel-box { border: 1px solid var(--gold); padding: 15px; margin-bottom: 20px; min-height: 150px; }
+        .panel-title { color: var(--gold); font-weight: bold; margin-bottom: 10px; }
+        .content-text { white-space: pre-wrap; line-height: 1.6; }
+
+        select { width: 100%; padding: 10px; background: #333; color: white; border: 1px solid var(--gold); }
+    </style>
+</head>
+<body>
+    <div class="header">ACEest FUNCTIONAL FITNESS</div>
+    <div class="main-container">
+        <div class="left-panel">
+            <div>
+                <p style="color: var(--gold); font-weight: bold;">Client Profile</p>
+                <label>Select Program:</label>
+                <select id="progSelect" onchange="updateDisplay()">
+                    <option value="">-- Select --</option>
+                    {% for name in programs %}<option value="{{name}}">{{name}}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="metrics">CAPACITY: 150 Users<br>AREA: 10,000 sq ft<br>BREAK-EVEN: 250 Members</div>
+        </div>
+
+        <div class="right-panel">
+            <div class="panel-box">
+                <div class="panel-title">Weekly Workout Chart</div>
+                <div id="workoutText" class="content-text">Select a profile to view workout</div>
+            </div>
+            <div class="panel-box">
+                <div class="panel-title">Daily Nutrition Plan (Tamil Nadu Context)</div>
+                <div id="dietText" class="content-text">Select a profile to view diet</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function updateDisplay() {
+            const val = document.getElementById('progSelect').value;
+            if (!val) return;
+            
+            const response = await fetch(`/get_plan/${encodeURIComponent(val)}`);
+            const data = await response.json();
+            
+            const workLabel = document.getElementById('workoutText');
+            workLabel.innerText = data.workout;
+            workLabel.style.color = data.color;
+            document.getElementById('dietText').innerText = data.diet;
+        }
+    </script>
+</body>
+</html>

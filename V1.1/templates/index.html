@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>ACEest Fitness & Performance</title>
+    <style>
+        :root { --gold: #d4af37; --dark: #1a1a1a; --panel: #222; }
+        body { background: var(--dark); color: white; font-family: Helvetica, Arial; margin: 0; }
+        .header { background: var(--gold); color: black; padding: 20px; text-align: center; font-weight: bold; font-size: 24px; }
+        
+        .main { display: grid; grid-template-columns: 350px 1fr; gap: 20px; padding: 20px; }
+        
+        /* Left Panel - Client Profile */
+        .left-panel { border: 2px solid var(--gold); padding: 20px; background: var(--panel); }
+        .input-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; color: var(--gold); font-weight: bold; }
+        input, select { width: 100%; padding: 8px; background: #333; border: 1px solid #444; color: white; border-radius: 4px; }
+        
+        /* Right Panel - Details */
+        .right-panel { display: flex; flex-direction: column; gap: 15px; }
+        .text-block { border: 1px solid var(--gold); background: #111; padding: 15px; height: 200px; overflow-y: auto; white-space: pre-wrap; }
+        .block-title { color: var(--gold); font-size: 14px; font-weight: bold; margin-bottom: 5px; }
+        .kcal-display { font-size: 20px; color: var(--gold); text-align: center; margin-top: 10px; border: 1px dashed var(--gold); padding: 10px; }
+        
+        button { width: 100%; padding: 10px; margin-top: 10px; cursor: pointer; font-weight: bold; }
+        .btn-save { background: var(--gold); border: none; }
+        .btn-reset { background: transparent; border: 1px solid var(--gold); color: var(--gold); }
+    </style>
+</head>
+<body>
+    <div class="header">ACEest FUNCTIONAL FITNESS SYSTEM</div>
+    <div class="main">
+        <div class="left-panel">
+            <div class="panel-title" style="color:var(--gold); margin-bottom:15px;">Client Profile</div>
+            <div class="input-group"><label>Name</label><input type="text" id="name"></div>
+            <div class="input-group"><label>Age</label><input type="number" id="age"></div>
+            <div class="input-group"><label>Weight (kg)</label><input type="number" id="weight" oninput="updateUI()"></div>
+            <div class="input-group">
+                <label>Program</label>
+                <select id="program" onchange="updateUI()">
+                    <option value="">-- Select --</option>
+                    {% for p in programs %}<option value="{{p}}">{{p}}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="input-group">
+                <label>Weekly Adherence (%): <span id="adhVal">0</span>%</label>
+                <input type="range" id="adherence" min="0" max="100" value="0" oninput="document.getElementById('adhVal').innerText=this.value">
+            </div>
+            <button class="btn-save" onclick="alert('Client Saved Locally!')">Save Client</button>
+            <button class="btn-reset" onclick="location.reload()">Reset</button>
+        </div>
+
+        <div class="right-panel">
+            <div>
+                <div class="block-title">Weekly Training Plan</div>
+                <div id="workout" class="text-block">Select profile to view...</div>
+            </div>
+            <div>
+                <div class="block-title">Nutrition Plan (TN Context)</div>
+                <div id="diet" class="text-block">Select profile to view...</div>
+            </div>
+            <div id="calories" class="kcal-display">Estimated Calories: --</div>
+        </div>
+    </div>
+
+    <script>
+        async function updateUI() {
+            const program = document.getElementById('program').value;
+            const weight = document.getElementById('weight').value;
+            if (!program) return;
+
+            const res = await fetch('/calculate', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ program, weight })
+            });
+            const data = await res.json();
+            
+            const workBox = document.getElementById('workout');
+            workBox.innerText = data.workout;
+            workBox.style.color = data.color;
+            
+            document.getElementById('diet').innerText = data.diet;
+            document.getElementById('calories').innerText = `Estimated Calories: ${data.calories} kcal`;
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+metadata:
+  name: aceestver-green
+spec:
+  template:
+    metadata:
+      labels:
+        app: aceestver
+        version: green

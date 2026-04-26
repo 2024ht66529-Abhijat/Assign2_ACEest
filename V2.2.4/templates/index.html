@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>ACEest Fitness & Performance</title>
+    <style>
+        :root { --gold: #d4af37; --dark: #1a1a1a; --panel: #262626; }
+        body { background: var(--dark); color: white; font-family: 'Helvetica', sans-serif; margin: 0; padding: 0; }
+        .header { background: var(--gold); color: black; padding: 20px; text-align: center; font-weight: bold; font-size: 24px; }
+        .main { display: grid; grid-template-columns: 350px 1fr; gap: 20px; padding: 20px; }
+        .panel { background: var(--panel); border: 1px solid var(--gold); padding: 15px; border-radius: 4px; height: fit-content; }
+        .panel h3 { color: var(--gold); margin-top: 0; border-bottom: 1px solid var(--gold); padding-bottom: 5px; }
+        label { display: block; margin-top: 10px; font-size: 14px; }
+        input, select { width: 95%; padding: 8px; margin: 5px 0; background: #333; color: white; border: 1px solid #555; }
+        button { width: 100%; padding: 12px; margin-top: 15px; background: var(--gold); border: none; font-weight: bold; cursor: pointer; }
+        button:hover { background: #b8962d; }
+        .console-box { background: #000; font-family: 'Consolas', monospace; padding: 20px; min-height: 500px; white-space: pre-wrap; border: 1px solid #333; color: #0f0; line-height: 1.5; }
+    </style>
+</head>
+<body>
+
+    <div class="header">ACEest FUNCTIONAL FITNESS SYSTEM</div>
+
+    <div class="main">
+        <!-- Left Panel: Form Inputs -->
+        <div class="panel">
+            <h3>Client Management</h3>
+            <label>Name</label><input type="text" id="name">
+            <label>Age</label><input type="number" id="age">
+            <label>Height (cm)</label><input type="number" id="height">
+            <label>Current Weight (kg)</label><input type="number" id="weight">
+            <label>Program</label>
+            <select id="program">
+                <option value="">-- Select --</option>
+                {% for p in programs %}<option value="{{p}}">{{p}}</option>{% endfor %}
+            </select>
+            <label>Target Weight (kg)</label><input type="number" id="target_weight">
+            <label>Target Adherence %</label><input type="number" id="target_adherence">
+            
+            <button onclick="saveClient()">SAVE CLIENT</button>
+            <button onclick="loadSummary()" style="background:#444; color:var(--gold); margin-top:5px;">LOAD SUMMARY</button>
+        </div>
+
+        <!-- Right Panel: Summary Display -->
+        <div class="right">
+            <div class="panel">
+                <h3>Client Summary</h3>
+                <div id="summaryDisplay" class="console-box">Enter a name and click "LOAD SUMMARY" or save a new client...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function saveClient() {
+            const payload = {
+                name: document.getElementById('name').value,
+                age: document.getElementById('age').value,
+                height: document.getElementById('height').value,
+                weight: document.getElementById('weight').value,
+                program: document.getElementById('program').value,
+                target_weight: document.getElementById('target_weight').value,
+                target_adherence: document.getElementById('target_adherence').value
+            };
+
+            const res = await fetch('/save_client', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
+            });
+            
+            const data = await res.json();
+            if (data.status === "success") {
+                alert("Client Saved successfully!");
+                loadSummary();
+            } else {
+                alert("Error: " + data.message);
+            }
+        }
+
+        async function loadSummary() {
+            const name = document.getElementById('name').value;
+            if (!name) return alert("Please enter a name to load.");
+
+            const res = await fetch(`/get_summary/${encodeURIComponent(name)}`);
+            if (!res.ok) return alert("Client not found.");
+
+            const data = await res.json();
+            
+            const metric = data.last_metric ? 
+                `${data.last_metric.date} | ${data.last_metric.weight}kg, Waist ${data.last_metric.waist}cm` : "No metrics logged yet";
+
+            const text = `
+CLIENT PROFILE
+--------------
+Name      : ${data.profile.name}
+Age       : ${data.profile.age || '-'}
+Height    : ${data.profile.height || '-'} cm
+Weight    : ${data.profile.weight || '-'} kg
+Program   : ${data.profile.program}
+Calories  : ${data.profile.calories || '-'} kcal/day
+
+PROGRAM NOTES
+-------------
+${data.prog_desc}
+
+GOALS
+-----
+Target Weight: ${data.profile.target_weight || '-'} kg
+Target Adh.  : ${data.profile.target_adherence || '-'} %
+
+PROGRESS SUMMARY
+----------------
+Weeks logged       : ${data.weeks}
+Average adherence  : ${data.avg_adh}%
+
+LAST BODY METRICS
+-----------------
+${metric}`;
+
+            document.getElementById('summaryDisplay').innerText = text;
+        }
+    </script>
+</body>
+</html>
