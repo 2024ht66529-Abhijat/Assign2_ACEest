@@ -56,26 +56,27 @@ pipeline {
         }
 
         stage('Deploy to Minikube') {
-            steps {
-                sh '''
-                    # Update local K8s manifest to use the new version tag
-                    sed -i "s|image: ${DOCKER_REPO}:.*|image: ${DOCKER_REPO}:${APP_VERSION}|g" k8s/base/deployment.yaml
-                    sed -i "s|\\${APP_VERSION}|${APP_VERSION}|g" k8s/base/deployment.yaml                    
-                    
-                    minikube start --driver=docker --container-runtime=containerd
-                    kubectl apply -f k8s/base/deployment.yaml
-                    kubectl apply -f k8s/base/services.yaml
-                    
-                    # Attempt rollout. If it fails, dump logs before failing the stage
-                    if ! kubectl rollout status deployment/aceestver --timeout=180s; then
-                        echo "❌ Rollout timed out! Capturing pod logs for debugging..."
-                        kubectl get pods
-                        kubectl logs -l app=aceestver --tail=50
-                        exit 1
-                    fi
-                '''      
-            }
-        }
+    steps {
+        sh '''
+            # ... (your existing sed commands) ...
+            
+            kubectl apply -f k8s/base/deployment.yaml
+            kubectl apply -f k8s/base/services.yaml
+            
+            # Use a slightly shorter timeout for faster feedback
+            if ! kubectl rollout status deployment/aceestver --timeout=120s; then
+                echo "❌ ROLLOUT FAILED! Printing Debug Info..."
+                kubectl get pods
+                echo "--- Pod Details ---"
+                kubectl describe pods -l app=aceestver
+                echo "--- Container Logs ---"
+                kubectl logs -l app=aceestver --tail=50
+                exit 1
+            fi
+        '''      
+    }
+}
+
 
         stage('Verify Service') {
             steps {
