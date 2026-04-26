@@ -2,15 +2,15 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_REPO    = "2024ht66529/aceestver"
-        APP_VERSION    = sh(script: "git tag --points-at HEAD || echo ${env.BRANCH_NAME}", returnStdout: true).trim()
-        NODE_PORT      = "30080"
-        // Fetch IMDSv2 Token and then the Public IP
-        PUBLIC_IP      = sh(script: '''
-            TOKEN=$(curl -s -X PUT "http://169.254.169" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
-            curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169 || curl -s ifconfig.me
-        ''', returnStdout: true).trim()
-    }
+    DOCKER_REPO    = "2024ht66529/aceestver"
+    APP_VERSION    = sh(script: "git tag --points-at HEAD || echo ${env.BRANCH_NAME}", returnStdout: true).trim()
+    NODE_PORT      = "30080"
+    // FIX: Added .254 to the IP address
+    PUBLIC_IP      = sh(script: '''
+        TOKEN=$(curl -s -X PUT "http://169.254.169" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+        curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169 || curl -s ifconfig.me
+    ''', returnStdout: true).trim()
+}
 
     stages {
         stage('Initialize & Versioning') {
@@ -27,26 +27,25 @@ pipeline {
         }
 
         stage('AWS Infrastructure Prep') {
-            steps {
-             // This wrapper automatically exports AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY
-            withCredentials([usernamePassword(credentialsId: 'aws-creds', 
+        steps {
+        withCredentials([usernamePassword(credentialsId: 'aws-creds', 
                                           usernameVariable: 'AWS_ACCESS_KEY_ID', 
                                           passwordVariable: 'AWS_SECRET_ACCESS_KEY')]) {
             script {
-                // Fetch IMDSv2 Token
+                // FIX: Added .254 to the IP address
                 def instanceId = sh(script: '''
                     TOKEN=$(curl -s -X PUT "http://169.254.169" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
                     curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169
                 ''', returnStdout: true).trim()
                 
-                def sgId = sh(script: "aws ec2 describe-instances --instance-ids ${instanceId} --query 'Reservations.Instances.SecurityGroups.GroupId' --output text", returnStdout: true).trim()
+                def sgId = sh(script: "aws ec2 describe-instances --instance-ids ${instanceId} --query 'Reservations[0].Instances[0].SecurityGroups[0].GroupId' --output text", returnStdout: true).trim()
                 
-                echo "🔓 Authenticated via IAM User. Opening Port ${NODE_PORT} on SG: ${sgId}"
+                echo "🔓 Opening Port ${NODE_PORT} on SG: ${sgId}"
                 sh "aws ec2 authorize-security-group-ingress --group-id ${sgId} --protocol tcp --port ${NODE_PORT} --cidr 0.0.0.0/0 || true"
             }
         }
     }
-   }
+        }
 
         stage('Docker Hub Login') {
             steps {
