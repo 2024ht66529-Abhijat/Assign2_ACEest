@@ -17,6 +17,7 @@ pipeline {
                 sh 'docker ps && kubectl config current-context'
             }
         }
+
         stage('Checkout SCM') {
             steps {
                 checkout scm
@@ -24,25 +25,23 @@ pipeline {
         }
 
         stage('Docker Hub Login') {
-        steps {
-        withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', 
-                                          usernameVariable: 'DOCKER_USER', 
-                                          passwordVariable: 'DOCKER_PASS')]) {
-          sh '''
-          echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
-          '''
-        }
-      }
-    }
-
-        stage('Build & Test Image') {
             steps {
-                // Build with specific version tag and 'latest' for the main branch
-                sh "docker build -t ${DOCKER_REPO}:${APP_VERSION} ."
-                sh "docker run --rm ${DOCKER_REPO}:${APP_VERSION} pytest"
+                withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', 
+                                                  usernameVariable: 'DOCKER_USER', 
+                                                  passwordVariable: 'DOCKER_PASS')]) {
+                    sh "echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin"
+                }
             }
         }
 
+        stage('Build & Test Image') {
+            steps {
+                // Build with specific version tag
+                sh "docker build -t ${DOCKER_REPO}:${APP_VERSION} ."
+                // Run tests inside the built container to ensure binary integrity
+                sh "docker run --rm ${DOCKER_REPO}:${APP_VERSION} pytest"
+            }
+        }
 
         stage('Push to Registry') {
             steps {
@@ -56,61 +55,76 @@ pipeline {
             }
         }
 
-       stage('Deploy to Minikube') {
+        stage('Deploy to Minikube') {
             steps {
                 sh '''
                     # Update local K8s manifest to use the new version tag
                     sed -i "s|image: ${DOCKER_REPO}:.*|image: ${DOCKER_REPO}:${APP_VERSION}|g" k8s/base/deployment.yaml
                     sed -i "s|\\${APP_VERSION}|${APP_VERSION}|g" k8s/base/deployment.yaml                    
+                    
                     minikube start --driver=docker --container-runtime=containerd
                     kubectl apply -f k8s/base/deployment.yaml
                     kubectl apply -f k8s/base/services.yaml
                     
-                    kubectl rollout status deployment/aceestver --timeout=120s
-
-                   
-                    echo "🌐 Starting minikube tunnel..."
-                    pgrep -f "minikube tunnel" || nohup minikube tunnel > /dev/null 2>&1 &
-                    sleep 10
-                     
-                    echo "🌐 Application is accessible at:"
-                    minikube service aceestver-service --url 
-                   
+                    # Attempt rollout. If it fails, dump logs before failing the stage
+                    if ! kubectl rollout status deployment/aceestver --timeout=180s; then
+                        echo "❌ Rollout timed out! Capturing pod logs for debugging..."
+                        kubectl get pods
+                        kubectl logs -l app=aceestver --tail=50
+                        exit 1
+                    fi
                 '''      
             }
         }
-       stage('Verify Service') {
+
+        stage('Verify Service') {
             steps {
                 script {
                     try {
                         sh '''
                             # Ensure tunnel is active for local verification
                             pgrep -f "minikube tunnel" || nohup minikube tunnel > /dev/null 2>&1 &
-                            sleep 10
+                            sleep 15
                             
-                            URL=$(minikube service aceestver-service --url)
-                            echo "🔍 Verifying $URL"
+                            # Fetch dynamic Minikube URL
+                            URL=$(minikube service aceestver-service --url | head -n 1)
+                            echo "🔍 Verifying availability at $URL"
+                            
+                            # Health check using curl
                             curl -f --connect-timeout 5 --max-time 10 $URL
                         '''
                         echo "✅ Verification Passed!"
                     } catch (Exception e) {
-                        error "❌ Verification Failed! Triggering Rollback..."
+                        error "❌ Verification Failed! Triggering Rollback post-action..."
                     }
                 }
             }
         }
     }
 
-   post {
+    post {
         failure {
             script {
                 echo "⚠️ Rollback initiated due to stage failure..."
                 sh '''
-                    # Attempt rollback, but don't crash if there's no history
+                    # Revert to the last successful deployment
+                    # Use || echo to ensure the build finishes even if no history exists
                     kubectl rollout undo deployment/aceestver || echo "No previous deployment found to roll back to."
+                    
+                    # Confirm status of the reverted version
+                    kubectl rollout status deployment/aceestver --timeout=60s || echo "Rollback status check failed."
                 '''
             }
         }
+        success {
+            echo "🎊 Deployment and Verification successful!"
+        }
+        always {
+            sh '''
+                echo "📊 Final Cluster state:"
+                kubectl get pods
+                kubectl get services
+            '''
+        }
     }
 }
-
