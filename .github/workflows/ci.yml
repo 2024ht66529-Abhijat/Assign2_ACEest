@@ -143,5 +143,5 @@ jobs:
           url: ${{ secrets.JENKINS_URL_L }}
           user: "Abhijat_2024ht66529"
           token: ${{ secrets.JENKINS_TOKEN_L }}
-          job: "Test-Assignment2"
+          job: "Assignment2"
           wait: true
