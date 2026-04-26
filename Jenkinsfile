@@ -99,6 +99,7 @@ pipeline {
                 }
             }
         }
+    }
 
    post {
         failure {
@@ -119,4 +120,4 @@ pipeline {
         }
     }
 }
-}
+
