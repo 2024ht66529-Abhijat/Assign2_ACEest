@@ -70,7 +70,7 @@ pipeline {
             steps {
                 sh """
                     # Replace placeholders in deployment.yaml
-                    sed -i "s|\\${APP_VERSION}|${env.APP_VERSION}|g" k8s/base/deployment.yaml
+                    sed -i "s|\\\${APP_VERSION}|${env.APP_VERSION}|g" k8s/base/deployment.yaml
                     sed -i "s|image: ${IMAGE_NAME}:.*|image: ${IMAGE_NAME}:${env.APP_VERSION}|g" k8s/base/deployment.yaml
 
                     minikube delete --all --purge || true
