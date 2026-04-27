@@ -29,6 +29,7 @@ pipeline {
         stage('Initialize & Versioning') {
             steps {
                 echo "🚀 Deploying Version: ${APP_VERSION}"
+                echo "🚀 Deploying Version: ${APP_VERSION}"
                 sh 'docker ps && kubectl config current-context'
             }
         }
@@ -48,6 +49,7 @@ pipeline {
                         def instanceId = "i-016ae3b180c8e0d06"
                         def sgId = sh(script: "aws ec2 describe-instances --instance-ids ${instanceId} --query 'Reservations[0].Instances[0].SecurityGroups[0].GroupId' --output text", returnStdout: true).trim()
 
+                        echo "🔓 Opening Port ${NODE_PORT} on SG: ${sgId}"
                         echo "🔓 Opening Port ${NODE_PORT} on SG: ${sgId}"
                         sh "aws ec2 authorize-security-group-ingress --group-id ${sgId} --protocol tcp --port ${NODE_PORT} --cidr 0.0.0.0/0 || true"
                     }
@@ -93,6 +95,7 @@ pipeline {
                     kubectl apply -f k8s/base/deployment.yaml --validate=false
                     kubectl apply -f k8s/base/services.yaml --validate=false
                     kubectl rollout status deployment/aceestver --timeout=180s
+                    kubectl rollout status deployment/aceestver --timeout=180s
                 '''
             }
         }
@@ -105,6 +108,7 @@ pipeline {
                         sh "curl -f --connect-timeout 15 http://${PUBLIC_IP}:${NODE_PORT}/login"
                     } catch (Exception e) {
                         error "❌ Health Check Failed at Cloud Edge! Triggering Rollback..."
+                        error "❌ Health Check Failed at Cloud Edge! Triggering Rollback..."
                     }
                 }
             }
@@ -116,6 +120,7 @@ pipeline {
             script {
                 echo "⚠️ Rollback initiated: Reverting to last stable version..."
                 sh 'kubectl rollout undo deployment/aceestver'
+                sh 'kubectl rollout status deployment/aceestver --timeout=300s'
                 sh 'kubectl rollout status deployment/aceestver --timeout=300s'
             }
         }
