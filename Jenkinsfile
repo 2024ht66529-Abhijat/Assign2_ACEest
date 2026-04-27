@@ -2,27 +2,34 @@ pipeline {
     agent any
 
     environment {
-    DOCKER_REPO = "2024ht66529/aceestver"
-    NODE_PORT   = "30080"
-    PUBLIC_IP   = "3.27.27.102"
-    PATH = "/usr/local/bin:${env.PATH}"
-}
+        DOCKER_REPO = "2024ht66529/aceestver"
+        IMAGE_NAME  = "${DOCKER_REPO}"
+        NODE_PORT   = "30080"
+        PUBLIC_IP   = "3.27.27.102"
+        PATH = "/usr/local/bin:${env.PATH}"
+    }
+
     stages {
-        
         stage('Set Version') {
-        steps {
-            script {
-                env.APP_VERSION = sh(script: "git tag --points-at HEAD || echo ${env.BRANCH_NAME}", returnStdout: true).trim()
+            steps {
+                script {
+                    env.APP_VERSION = sh(
+                        script: "git tag --points-at HEAD || echo ${env.BRANCH_NAME}",
+                        returnStdout: true
+                    ).trim()
+                }
+                echo "🚀 Deploying Version: ${env.APP_VERSION}"
             }
         }
-    }
+
         stage('Sanity Check') {
             steps {
                 sh 'whoami'
                 sh 'docker ps || echo "Docker not accessible"'
                 sh 'kubectl config current-context || echo "Kubeconfig not accessible"'
             }
-                }
+        }
+
         stage('Checkout SCM') {
             steps {
                 checkout scm
@@ -30,42 +37,36 @@ pipeline {
         }
 
         stage('Docker Hub Login') {
-        steps {
-        withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', 
-                                          usernameVariable: 'DOCKER_USER', 
-                                          passwordVariable: 'DOCKER_PASS')]) {
-          sh '''
-          echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
-          '''
-        }
-      }
-    }
-
-    stage('Build Docker Image') {
             steps {
-                sh '''
-                    docker build -t $IMAGE_NAME:$APP_VERSION .
-                '''
+                withCredentials([usernamePassword(credentialsId: 'dockerhub-creds',
+                                                  usernameVariable: 'DOCKER_USER',
+                                                  passwordVariable: 'DOCKER_PASS')]) {
+                    sh '''
+                        echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
+                    '''
+                }
             }
         }
 
-    stage('Run Tests in Container') {
+        stage('Build Docker Image') {
             steps {
-                sh '''
-                    docker run $IMAGE_NAME:$APP_VERSION pytest
-                '''
+                sh "docker build -t ${IMAGE_NAME}:${env.APP_VERSION} ."
             }
         }
 
-      stage('Push Image') {
+        stage('Run Tests in Container') {
             steps {
-                sh '''
-                    docker push $IMAGE_NAME:$APP_VERSION
-                '''
+                sh "docker run --rm ${IMAGE_NAME}:${env.APP_VERSION} pytest"
             }
         }
 
-       stage('Deploy to Minikube') {
+        stage('Push Image') {
+            steps {
+                sh "docker push ${IMAGE_NAME}:${env.APP_VERSION}"
+            }
+        }
+
+        stage('Deploy to Minikube') {
             steps {
                 sh '''
                     minikube delete --all --purge || true
@@ -81,41 +82,43 @@ pipeline {
 
                     kubectl rollout status deployment/aceestver --timeout=120s
 
-                   
-                     echo "🌐 Starting minikube tunnel..."
-                        nohup minikube tunnel --cleanup > /dev/null 2>&1 &
-                        sleep 10
-                     
-                     echo "🌐 Application is accessible at:"
-                     minikube service aceestver-service --url 
-                   
-                '''      
+                    echo "🌐 Starting minikube tunnel..."
+                    nohup minikube tunnel --cleanup > /dev/null 2>&1 &
+                    sleep 10
+
+                    echo "🌐 Application is accessible at:"
+                    minikube service aceestver-service --url
+                '''
             }
         }
 
-       stage('Verify Service') {
+        stage('Verify Service') {
             steps {
                 sh '''
                     URL=$(minikube service aceestver-service --url)
                     echo "Testing $URL ..."
-                    curl -f $URL || (echo "App not reachable" && exit 1)
+                    curl -f --connect-timeout 15 $URL || (echo "App not reachable" && exit 1)
                 '''
             }
         }
     }
+
     post {
         always {
             sh '''
                 echo "📊 Cluster state snapshot:"
                 kubectl get pods -A || true
-
-
             '''
         }
         success {
             echo "✅ Build and rollout successful"
-
+        }
+        failure {
+            script {
+                echo "⚠️ Rollback initiated: Reverting to last stable version..."
+                sh 'kubectl rollout undo deployment/aceestver'
+                sh 'kubectl rollout status deployment/aceestver --timeout=300s'
+            }
         }
     }
 }
-
