@@ -5,15 +5,30 @@ pipeline {
         DOCKER_REPO = "2024ht66529/aceestver"
         APP_VERSION = sh(script: "git tag --points-at HEAD || echo ${env.BRANCH_NAME}", returnStdout: true).trim()
         NODE_PORT   = "30080"
-        SSH_PORT    = "22"
-        // Updated to use your static Public IP
-        PUBLIC_IP   = "3.27.27.102" 
+        PUBLIC_IP   = "3.27.27.102"
+        PATH = "/usr/local/bin:${env.PATH}"
     }
 
     stages {
+
+        stage('Sanity Check AWS') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'aws-creds',
+                                                  usernameVariable: 'AWS_ACCESS_KEY_ID',
+                                                  passwordVariable: 'AWS_SECRET_ACCESS_KEY')]) {
+                    sh '''
+                        echo "🔍 PATH: $PATH"
+                        which aws || { echo "AWS CLI not found"; exit 1; }
+                        aws --version
+                        aws sts get-caller-identity || { echo "❌ AWS credentials invalid"; exit 1; }
+                    '''
+                }
+            }
+        }
+
         stage('Initialize & Versioning') {
             steps {
-                echo "🚀 Deploying Version: ${APP_VERSION} to ${PUBLIC_IP}"
+                echo "🚀 Deploying Version: ${APP_VERSION}"
                 sh 'docker ps && kubectl config current-context'
             }
         }
@@ -30,20 +45,11 @@ pipeline {
                                                   usernameVariable: 'AWS_ACCESS_KEY_ID',
                                                   passwordVariable: 'AWS_SECRET_ACCESS_KEY')]) {
                     script {
-                        // Jenkins still needs the Instance ID to know which SG to update
-                        def instanceId = sh(script: '''
-                            TOKEN=$(curl -s -X PUT "http://169.254.169" \
-                                -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
-                            curl -s -H "X-aws-ec2-metadata-token: $TOKEN" \
-                                http://169.254.169
-                        ''', returnStdout: true).trim()
-
+                        def instanceId = "i-016ae3b180c8e0d06"
                         def sgId = sh(script: "aws ec2 describe-instances --instance-ids ${instanceId} --query 'Reservations[0].Instances[0].SecurityGroups[0].GroupId' --output text", returnStdout: true).trim()
 
-                        echo "🔓 Opening Port ${NODE_PORT} and Port ${SSH_PORT} on SG: ${sgId}"
-                        
+                        echo "🔓 Opening Port ${NODE_PORT} on SG: ${sgId}"
                         sh "aws ec2 authorize-security-group-ingress --group-id ${sgId} --protocol tcp --port ${NODE_PORT} --cidr 0.0.0.0/0 || true"
-                        sh "aws ec2 authorize-security-group-ingress --group-id ${sgId} --protocol tcp --port ${SSH_PORT} --cidr 0.0.0.0/0 || true"
                     }
                 }
             }
@@ -86,7 +92,7 @@ pipeline {
                     minikube start --driver=docker --ports=30080:30080
                     kubectl apply -f k8s/base/deployment.yaml --validate=false
                     kubectl apply -f k8s/base/services.yaml --validate=false
-                    kubectl rollout status deployment/aceestver --timeout=120s
+                    kubectl rollout status deployment/aceestver --timeout=180s
                 '''
             }
         }
@@ -98,7 +104,7 @@ pipeline {
                         echo "🔍 Verifying application at http://${PUBLIC_IP}:${NODE_PORT}"
                         sh "curl -f --connect-timeout 15 http://${PUBLIC_IP}:${NODE_PORT}/login"
                     } catch (Exception e) {
-                        error "❌ Health Check Failed at http://${PUBLIC_IP}:${NODE_PORT}/login! Triggering Rollback..."
+                        error "❌ Health Check Failed at Cloud Edge! Triggering Rollback..."
                     }
                 }
             }
@@ -110,7 +116,7 @@ pipeline {
             script {
                 echo "⚠️ Rollback initiated: Reverting to last stable version..."
                 sh 'kubectl rollout undo deployment/aceestver'
-                sh 'kubectl rollout status deployment/aceestver --timeout=60s'
+                sh 'kubectl rollout status deployment/aceestver --timeout=300s'
             }
         }
     }
