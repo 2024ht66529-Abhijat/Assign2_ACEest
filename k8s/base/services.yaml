@@ -14,5 +14,5 @@ spec:
     - name: http
       port: 80
       targetPort: 5000
-      nodePort: 30080   # Minikube will use this NodePort
-  type: NodePort        # Default for local testing
+      nodePort: 30080   # predictable NodePort for Minikube
+  type: LoadBalancer     # EKS will provision an ELB; Minikube will still expose via NodePort
