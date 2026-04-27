@@ -5,7 +5,7 @@ pipeline {
         DOCKER_REPO = "2024ht66529/aceestver"
         IMAGE_NAME  = "${DOCKER_REPO}"
         NODE_PORT   = "30080"
-        PUBLIC_IP   = "3.27.27.102"   // replace with your EC2 public IP if needed
+        PUBLIC_IP   = "3.27.27.102"   // replace with your EC2 public IP if using NodePort
         PATH = "/usr/local/bin:${env.PATH}"
     }
 
@@ -118,19 +118,16 @@ pipeline {
                             kubectl apply -f k8s/base/services.yaml --validate=false
                             kubectl rollout status deployment/aceestver --timeout=180s
                         """
-                    }
-                }
-            }
-        }
 
-        stage('Verify AWS Service') {
-            steps {
-                script {
-                    try {
-                        echo "🔍 Verifying application at http://${PUBLIC_IP}:${NODE_PORT}"
-                        sh "curl -f --connect-timeout 15 http://${PUBLIC_IP}:${NODE_PORT}/login"
-                    } catch (Exception e) {
-                        error "❌ Health Check Failed at AWS! Triggering Rollback..."
+                        // Detect LoadBalancer or fallback to EC2 public IP
+                        def lbUrl = sh(script: "kubectl get svc aceestver-service -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'", returnStdout: true).trim()
+                        if (lbUrl) {
+                            echo "🔍 Verifying AWS LoadBalancer at http://${lbUrl}"
+                            sh "curl -f --connect-timeout 15 http://${lbUrl}/login"
+                        } else {
+                            echo "🔍 Verifying AWS NodePort at http://${PUBLIC_IP}:${NODE_PORT}"
+                            sh "curl -f --connect-timeout 15 http://${PUBLIC_IP}:${NODE_PORT}/login"
+                        }
                     }
                 }
             }
