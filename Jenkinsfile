@@ -65,30 +65,27 @@ pipeline {
         }
 
         stage('Deploy to Minikube') {
-            steps {
-                sh '''
-                    minikube delete --all --purge || true
-                    minikube start --driver=docker --container-runtime=containerd --force
-                    minikube update-context
+        steps {
+        sh """
+            sed -i "s|\\${APP_VERSION}|${env.APP_VERSION}|g" k8s/base/deployment.yaml
+            sed -i "s|image: ${IMAGE_NAME}:.*|image: ${IMAGE_NAME}:${env.APP_VERSION}|g" k8s/base/deployment.yaml
 
-                    echo "=== Cluster Info ==="
-                    kubectl cluster-info
-                    kubectl get nodes
+            minikube delete --all --purge || true
+            minikube start --driver=docker --container-runtime=containerd --force
+            minikube update-context
 
-                    kubectl apply -f k8s/base/deployment.yaml --validate=false
-                    kubectl apply -f k8s/base/services.yaml --validate=false
+            echo "=== Cluster Info ==="
+            kubectl cluster-info
+            kubectl get nodes
 
-                    kubectl rollout status deployment/aceestver --timeout=120s
+            kubectl apply -f k8s/base/deployment.yaml --validate=false
+            kubectl apply -f k8s/base/services.yaml --validate=false
 
-                    echo "🌐 Starting minikube tunnel..."
-                    nohup minikube tunnel --cleanup > /dev/null 2>&1 &
-                    sleep 10
+            kubectl rollout status deployment/aceestver --timeout=120s
+        """
+    }
+}
 
-                    echo "🌐 Application is accessible at:"
-                    minikube service aceestver-service --url
-                '''
-            }
-        }
 
         stage('Verify Service') {
             steps {
