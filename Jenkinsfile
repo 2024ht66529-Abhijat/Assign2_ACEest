@@ -5,7 +5,7 @@ pipeline {
         DOCKER_REPO = "2024ht66529/aceestver"
         IMAGE_NAME  = "${DOCKER_REPO}"
         NODE_PORT   = "30080"
-        PUBLIC_IP   = "3.27.27.102"   // EC2 public IP
+        PUBLIC_IP   = "3.25.89.154"   // EC2 public IP
         PATH = "/usr/local/bin:${env.PATH}"
     }
 
