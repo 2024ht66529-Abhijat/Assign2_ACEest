@@ -76,13 +76,13 @@ pipeline {
                             sed -i "s|image: ${IMAGE_NAME}:.*|image: ${IMAGE_NAME}:${env.APP_VERSION}|g" k8s/base/deployment.yaml
                         """
 
-                        # Copy manifests to EC2
+                        
                         sh """
                             scp -i $EC2_KEY -o StrictHostKeyChecking=no k8s/base/deployment.yaml $EC2_USER@${remoteHost}:/home/$EC2_USER/
                             scp -i $EC2_KEY -o StrictHostKeyChecking=no k8s/base/services.yaml $EC2_USER@${remoteHost}:/home/$EC2_USER/
                         """
 
-                        # Apply manifests using K3s kubeconfig
+                        
                         sh """
                             ssh -i $EC2_KEY -o StrictHostKeyChecking=no $EC2_USER@${remoteHost} \\
                                 "sudo cp /etc/rancher/k3s/k3s.yaml ~/.kube/config && \\
@@ -92,7 +92,7 @@ pipeline {
                                  kubectl rollout status deployment/aceestver --timeout=180s"
                         """
 
-                        # External smoke test via NodePort
+                        
                         sh """
                             curl -f --connect-timeout 15 http://${remoteHost}:${NODE_PORT}/login
                         """
