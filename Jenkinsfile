@@ -23,6 +23,41 @@ pipeline {
             }
         }
 
+        stage('Sanity Check Docker') {
+            steps {
+                sh '''
+                  echo "Checking Docker permissions..."
+                  if ! groups | grep -q docker; then
+                    echo "ERROR: Jenkins user is not in docker group"
+                    exit 1
+                  fi
+
+                  docker ps >/dev/null 2>&1 || {
+                    echo "ERROR: Cannot access Docker daemon"
+                    exit 1
+                  }
+                  echo "✅ Docker is accessible"
+                '''
+            }
+        }
+
+        stage('Start Kind Cluster') {
+            steps {
+                sh '''
+                  echo "Ensuring kind cluster exists..."
+                  if ! kind get clusters | grep -q jenkins-test; then
+                    echo "Creating kind cluster..."
+                    kind create cluster --name jenkins-test
+                  else
+                    echo "Kind cluster already exists"
+                  fi
+
+                  kubectl cluster-info
+                  kubectl get nodes
+                '''
+            }
+        }
+
         stage('Sanity Check') {
             steps {
                 sh 'whoami'
@@ -73,19 +108,16 @@ pipeline {
                     script {
                         def remoteHost = "${PUBLIC_IP}"
 
-                        // Update manifests with version before copying
                         sh """
                             sed -i "s|\\\${APP_VERSION}|${env.APP_VERSION}|g" k8s/base/deployment.yaml
                             sed -i "s|image: ${IMAGE_NAME}:.*|image: ${IMAGE_NAME}:${env.APP_VERSION}|g" k8s/base/deployment.yaml
                         """
 
-                        // Copy manifests to EC2 using SSH key
                         sh """
                             scp -i $EC2_KEY -o StrictHostKeyChecking=no k8s/base/deployment.yaml $EC2_USER@${remoteHost}:/home/$EC2_USER/
                             scp -i $EC2_KEY -o StrictHostKeyChecking=no k8s/base/services.yaml $EC2_USER@${remoteHost}:/home/$EC2_USER/
                         """
 
-                        // Apply manifests remotely
                         sh """
                             ssh -i $EC2_KEY -o StrictHostKeyChecking=no $EC2_USER@${remoteHost} \\
                                 "kubectl apply -f /home/$EC2_USER/deployment.yaml --validate=false && \\
@@ -93,7 +125,6 @@ pipeline {
                                  kubectl rollout status deployment/aceestver --timeout=180s"
                         """
 
-                        // Verify service remotely
                         sh """
                             ssh -i $EC2_KEY -o StrictHostKeyChecking=no $EC2_USER@${remoteHost} \\
                                 "curl -f --connect-timeout 15 http://localhost:${NODE_PORT}/login"
