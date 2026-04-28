@@ -136,20 +136,34 @@ pipeline {
     }
 
     post {
-        always {
-            sh '''
-                echo "📊 Cluster state snapshot:"
-                kubectl get pods -A || true
-            '''
-        }
-        success {
-            echo "✅ Build and rollout successful (Remote EC2)"
-        }
-        failure {
+    always {
+        withCredentials([sshUserPrivateKey(credentialsId: 'ec2-ssh-creds',
+                                          keyFileVariable: 'EC2_KEY',
+                                          usernameVariable: 'EC2_USER')]) {
             script {
+                def remoteHost = "${PUBLIC_IP}"
+                sh """
+                    ssh -i $EC2_KEY -o StrictHostKeyChecking=no $EC2_USER@${remoteHost} \
+                        "echo '📊 Cluster state snapshot:' && kubectl get pods -A || true"
+                """
+            }
+        }
+    }
+    success {
+        echo "✅ Build and rollout successful (Remote EC2)"
+    }
+    failure {
+        withCredentials([sshUserPrivateKey(credentialsId: 'ec2-ssh-creds',
+                                          keyFileVariable: 'EC2_KEY',
+                                          usernameVariable: 'EC2_USER')]) {
+            script {
+                def remoteHost = "${PUBLIC_IP}"
                 echo "⚠️ Rollback initiated: Reverting to last stable version..."
-                sh 'kubectl rollout undo deployment/aceestver || true'
-                sh 'kubectl rollout status deployment/aceestver --timeout=300s || true'
+                sh """
+                    ssh -i $EC2_KEY -o StrictHostKeyChecking=no $EC2_USER@${remoteHost} \
+                        "kubectl rollout undo deployment/aceestver || true && \
+                         kubectl rollout status deployment/aceestver --timeout=300s || true"
+                """
             }
         }
     }
