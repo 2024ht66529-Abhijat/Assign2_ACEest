@@ -31,7 +31,7 @@ def get_plan(program_name):
         return jsonify(plan)
     return jsonify({"error": "Plan not found"}), 404
 
-# ✅ New Login Route
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
