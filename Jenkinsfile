@@ -6,7 +6,8 @@ pipeline {
         IMAGE_NAME  = "${DOCKER_REPO}"
         NODE_PORT   = "30080"
         PUBLIC_IP   = "3.25.89.154"   // EC2 public IP
-        PATH = "/usr/local/bin:${env.PATH}"
+        PATH        = "/usr/local/bin:${env.PATH}"
+        KUBECONFIG  = "/var/lib/jenkins/.kube/config"
     }
 
     stages {
@@ -63,40 +64,19 @@ pipeline {
             }
         }
 
-        stage('Deploy to Remote EC2 via SSH') {
+        stage('Deploy to K3s Cluster') {
             steps {
-                withCredentials([sshUserPrivateKey(credentialsId: 'ec2-ssh-creds',
-                                                  keyFileVariable: 'EC2_KEY',
-                                                  usernameVariable: 'EC2_USER')]) {
-                    script {
-                        def remoteHost = "${PUBLIC_IP}"
+                script {
+                    sh """
+                        sed -i "s|\\\${APP_VERSION}|${env.APP_VERSION}|g" k8s/base/deployment.yaml
+                        sed -i "s|image: ${IMAGE_NAME}:.*|image: ${IMAGE_NAME}:${env.APP_VERSION}|g" k8s/base/deployment.yaml
 
-                        sh """
-                            sed -i "s|\\\${APP_VERSION}|${env.APP_VERSION}|g" k8s/base/deployment.yaml
-                            sed -i "s|image: ${IMAGE_NAME}:.*|image: ${IMAGE_NAME}:${env.APP_VERSION}|g" k8s/base/deployment.yaml
-                        """
+                        kubectl apply -f k8s/base/deployment.yaml --validate=false
+                        kubectl apply -f k8s/base/services.yaml --validate=false
+                        kubectl rollout status deployment/aceestver --timeout=180s
 
-                        
-                        sh """
-                            scp -i $EC2_KEY -o StrictHostKeyChecking=no k8s/base/deployment.yaml $EC2_USER@${remoteHost}:/home/$EC2_USER/
-                            scp -i $EC2_KEY -o StrictHostKeyChecking=no k8s/base/services.yaml $EC2_USER@${remoteHost}:/home/$EC2_USER/
-                        """
-
-                        
-                        sh """
-                            ssh -i $EC2_KEY -o StrictHostKeyChecking=no $EC2_USER@${remoteHost} \\
-                                "sudo cp /etc/rancher/k3s/k3s.yaml ~/.kube/config && \\
-                                 sudo chown $EC2_USER:$EC2_USER ~/.kube/config && \\
-                                 kubectl apply -f /home/$EC2_USER/deployment.yaml --validate=false && \\
-                                 kubectl apply -f /home/$EC2_USER/services.yaml --validate=false && \\
-                                 kubectl rollout status deployment/aceestver --timeout=180s"
-                        """
-
-                        
-                        sh """
-                            curl -f --connect-timeout 15 http://${remoteHost}:${NODE_PORT}/login
-                        """
-                    }
+                        curl -f --connect-timeout 15 http://${PUBLIC_IP}:${NODE_PORT}/login
+                    """
                 }
             }
         }
@@ -104,34 +84,21 @@ pipeline {
 
     post {
         always {
-            withCredentials([sshUserPrivateKey(credentialsId: 'ec2-ssh-creds',
-                                              keyFileVariable: 'EC2_KEY',
-                                              usernameVariable: 'EC2_USER')]) {
-                script {
-                    def remoteHost = "${PUBLIC_IP}"
-                    sh """
-                        ssh -i $EC2_KEY -o StrictHostKeyChecking=no $EC2_USER@${remoteHost} \\
-                            "echo '📊 Cluster state snapshot:' && kubectl get pods -A || true"
-                    """
-                }
+            script {
+                echo "📊 Cluster state snapshot:"
+                sh "kubectl get pods -A || true"
             }
         }
         success {
-            echo "✅ Build and rollout successful (Remote EC2 K3s)"
+            echo "✅ Build and rollout successful (K3s via kubeconfig)"
         }
         failure {
-            withCredentials([sshUserPrivateKey(credentialsId: 'ec2-ssh-creds',
-                                              keyFileVariable: 'EC2_KEY',
-                                              usernameVariable: 'EC2_USER')]) {
-                script {
-                    def remoteHost = "${PUBLIC_IP}"
-                    echo "⚠️ Rollback initiated: Reverting to last stable version..."
-                    sh """
-                        ssh -i $EC2_KEY -o StrictHostKeyChecking=no $EC2_USER@${remoteHost} \\
-                            "kubectl rollout undo deployment/aceestver || true && \\
-                             kubectl rollout status deployment/aceestver --timeout=300s || true"
-                    """
-                }
+            script {
+                echo "⚠️ Rollback initiated: Reverting to last stable version..."
+                sh """
+                    kubectl rollout undo deployment/aceestver || true
+                    kubectl rollout status deployment/aceestver --timeout=60s || true
+                """
             }
         }
     }
