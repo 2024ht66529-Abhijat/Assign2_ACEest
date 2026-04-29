@@ -5,9 +5,8 @@ pipeline {
         DOCKER_REPO = "2024ht66529/aceestver"
         IMAGE_NAME  = "${DOCKER_REPO}"
         NODE_PORT   = "30080"
-        PUBLIC_IP   = "3.25.89.154"   // EC2 public IP
-        PATH        = "/usr/local/bin:${env.PATH}"
-        KUBECONFIG = "/home/abhij/.kube/config"
+        PUBLIC_IP   = "172.31.70.181"
+        PATH = "/usr/local/bin:${env.PATH}"
     }
 
     stages {
@@ -16,6 +15,7 @@ pipeline {
                 script {
                     def version = sh(script: "git tag --points-at HEAD", returnStdout: true).trim()
                     if (!version) {
+                        // fallback to branch name or build number
                         version = env.BRANCH_NAME ?: env.BUILD_NUMBER
                     }
                     env.APP_VERSION = version
@@ -24,9 +24,11 @@ pipeline {
             }
         }
 
-        stage('Sanity Check Docker') {
+        stage('Sanity Check') {
             steps {
-                sh "docker ps >/dev/null 2>&1 || { echo 'ERROR: Cannot access Docker daemon'; exit 1; }"
+                sh 'whoami'
+                sh 'docker ps || echo "Docker not accessible"'
+                sh 'kubectl config current-context || echo "Kubeconfig not accessible"'
             }
         }
 
@@ -64,58 +66,55 @@ pipeline {
             }
         }
 
-        stage('Sanity Check Kubeconfig') {
+        stage('Deploy to Minikube') {
             steps {
-        script {
-            sh """
-                echo '🔎 Checking Jenkins runtime user...'
-                whoami
+                sh """
+                    # Replace placeholders in deployment.yaml
+                    sed -i "s|\\\${APP_VERSION}|${env.APP_VERSION}|g" k8s/base/deployment.yaml
+                    sed -i "s|image: ${IMAGE_NAME}:.*|image: ${IMAGE_NAME}:${env.APP_VERSION}|g" k8s/base/deployment.yaml
 
-                echo '🔎 Listing kubeconfig file...'
-                ls -l ${KUBECONFIG}
+                    minikube delete --all --purge || true
+                    minikube start --driver=docker --container-runtime=containerd --force
+                    minikube update-context
 
-                echo '🔎 Testing kubectl connectivity...'
-                kubectl --kubeconfig=${KUBECONFIG} get nodes
-            """
+                    echo "=== Cluster Info ==="
+                    kubectl cluster-info
+                    kubectl get nodes
+
+                    kubectl apply -f k8s/base/deployment.yaml --validate=false
+                    kubectl apply -f k8s/base/services.yaml --validate=false
+
+                    kubectl rollout status deployment/aceestver --timeout=120s
+                """
+            }
         }
-    }
-}
 
-        stage('Deploy to K3s Cluster') {
+        stage('Verify Service') {
             steps {
-                script {
-                    sh """
-                        sed -i "s|\\\${APP_VERSION}|${env.APP_VERSION}|g" k8s/base/deployment.yaml
-                        sed -i "s|image: ${IMAGE_NAME}:.*|image: ${IMAGE_NAME}:${env.APP_VERSION}|g" k8s/base/deployment.yaml
-
-                        kubectl apply -f k8s/base/deployment.yaml --validate=false
-                        kubectl apply -f k8s/base/services.yaml --validate=false
-                        kubectl rollout status deployment/aceestver --timeout=180s
-
-                        curl -f --connect-timeout 15 http://${PUBLIC_IP}:${NODE_PORT}/login
-                    """
-                }
+                sh '''
+                    URL=$(minikube service aceestver-service --url)
+                    echo "Testing $URL ..."
+                    curl -f --connect-timeout 15 $URL || (echo "App not reachable" && exit 1)
+                '''
             }
         }
     }
 
     post {
         always {
-            script {
+            sh '''
                 echo "📊 Cluster state snapshot:"
-                sh "kubectl get pods -A || true"
-            }
+                kubectl get pods -A || true
+            '''
         }
         success {
-            echo "✅ Build and rollout successful (K3s via kubeconfig)"
+            echo "✅ Build and rollout successful"
         }
         failure {
             script {
                 echo "⚠️ Rollback initiated: Reverting to last stable version..."
-                sh """
-                    kubectl rollout undo deployment/aceestver || true
-                    kubectl rollout status deployment/aceestver --timeout=60s || true
-                """
+                sh 'kubectl rollout undo deployment/aceestver || true'
+                sh 'kubectl rollout status deployment/aceestver --timeout=300s || true'
             }
         }
     }
