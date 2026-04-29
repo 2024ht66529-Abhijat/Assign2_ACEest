@@ -7,7 +7,7 @@ pipeline {
         NODE_PORT   = "30080"
         PUBLIC_IP   = "3.25.89.154"   // EC2 public IP
         PATH        = "/usr/local/bin:${env.PATH}"
-        KUBECONFIG  = "/var/lib/jenkins/.kube/config"
+        KUBECONFIG = "/home/abhij/.kube/config"
     }
 
     stages {
@@ -63,6 +63,23 @@ pipeline {
                 sh "docker push ${IMAGE_NAME}:${env.APP_VERSION}"
             }
         }
+
+        stage('Sanity Check Kubeconfig') {
+            steps {
+        script {
+            sh """
+                echo '🔎 Checking Jenkins runtime user...'
+                whoami
+
+                echo '🔎 Listing kubeconfig file...'
+                ls -l ${KUBECONFIG}
+
+                echo '🔎 Testing kubectl connectivity...'
+                kubectl --kubeconfig=${KUBECONFIG} get nodes
+            """
+        }
+    }
+}
 
         stage('Deploy to K3s Cluster') {
             steps {
