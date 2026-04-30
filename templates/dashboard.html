@@ -1,139 +1,54 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>ACEest Dashboard</title>
+    <title>ACEest Analytics Dashboard</title>
+    <script src="https://jsdelivr.net"></script>
     <style>
-        :root { --gold: #d4af37; --dark: #1a1a1a; --gray: #333; }
-        body {
-            background: var(--dark);
-            color: white;
-            font-family: 'Helvetica', sans-serif;
-            margin: 0;
-            display: flex;
-            flex-direction: column;
-            min-height: 100vh;
-        }
-        .header {
-            background: var(--gold);
-            color: black;
-            padding: 20px;
-            font-weight: bold;
-            text-align: center;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.6);
-        }
-        .main {
-            display: grid;
-            grid-template-columns: 300px 1fr;
-            gap: 20px;
-            padding: 20px;
-            flex: 1;
-        }
-        .panel {
-            border: 2px solid var(--gold);
-            padding: 15px;
-            background: #222;
-            border-radius: 8px;
-            box-shadow: 0 0 12px rgba(212,175,55,0.3);
-        }
-        .panel h3 {
-            color: var(--gold);
-            margin-top: 0;
-        }
-        input, select {
-            width: 100%;
-            padding: 8px;
-            margin: 5px 0;
-            background: var(--gray);
-            color: white;
-            border: 1px solid var(--gold);
-            border-radius: 4px;
-        }
-        button {
-            width: 100%;
-            padding: 10px;
-            margin-top: 10px;
-            background: var(--gold);
-            border: none;
-            font-weight: bold;
-            cursor: pointer;
-            border-radius: 4px;
-            transition: 0.3s;
-        }
-        button:hover {
-            background: #b8962d;
-        }
-        .console {
-            background: #000;
-            color: #0f0;
-            padding: 15px;
-            font-family: monospace;
-            min-height: 200px;
-            white-space: pre;
-            border: 1px solid var(--gold);
-            border-radius: 4px;
-            box-shadow: inset 0 0 10px rgba(212,175,55,0.4);
-        }
-        table {
-            width: 100%;
-            margin-top: 20px;
-            border-collapse: collapse;
-        }
-        th, td {
-            border: 1px solid var(--gold);
-            padding: 6px;
-            text-align: center;
-        }
-        th {
-            background: var(--gold);
-            color: black;
-        }
+        :root { --gold: #d4af37; --dark: #1a1a1a; --panel: #262626; }
+        body { background: var(--dark); color: white; font-family: sans-serif; margin: 0; }
+        .header { background: var(--gold); color: black; padding: 15px; text-align: center; font-weight: bold; }
+        .main { display: grid; grid-template-columns: 320px 1fr; gap: 20px; padding: 20px; }
+        .panel { border: 1px solid var(--gold); padding: 15px; background: var(--panel); border-radius: 4px; }
+        input, select { width: 95%; padding: 8px; margin: 5px 0 12px 0; background: #333; color: white; border: 1px solid #555; }
+        button { width: 100%; padding: 12px; background: var(--gold); border: none; font-weight: bold; cursor: pointer; }
+        .chart-box { background: white; padding: 15px; border-radius: 4px; margin-top: 20px; }
     </style>
 </head>
 <body>
-    <div class="header">ACEest Fitness Dashboard ({{ role }})</div>
+    <div class="header">ACEest PERFORMANCE DASHBOARD ({{ role }}) | <a href="/logout">Logout</a></div>
     <div class="main">
         <div class="panel">
-            <h3>Management</h3>
-            <input type="text" id="name" placeholder="Name">
-            <input type="number" id="weight" placeholder="Weight">
-            <select id="program">{% for p in programs %}<option>{{ p }}</option>{% endfor %}</select>
-            <input type="date" id="membership">
-            <button onclick="saveClient()">Save Client</button>
-            <button onclick="generateAI()">Generate AI Program</button>
-            <button onclick="window.location.href='/export_pdf/'+document.getElementById('name').value">Export PDF</button>
+            <h3 style="color:var(--gold)">Management</h3>
+            <label>Name</label><input type="text" id="name">
+            <label>Weight (kg)</label><input type="number" id="weight">
+            <label>Program</label>
+            <select id="program">{% for p in programs %}<option>{{p}}</option>{% endfor %}</select>
+            <button onclick="saveClient()">SAVE & UPDATE TREND</button>
         </div>
         <div class="panel">
-            <div id="summary" class="console">Select client to view summary...</div>
-            <table id="progTable">
-                <thead><tr><th>Day</th><th>Exercise</th><th>Sets</th><th>Reps</th></tr></thead>
-                <tbody></tbody>
-            </table>
+            <h3 style="color:var(--gold)">Weight Performance Trend</h3>
+            <div class="chart-box"><canvas id="analyticsChart"></canvas></div>
         </div>
     </div>
     <script>
+        let myChart = null;
         async function saveClient() {
-            const data = { 
-                name: document.getElementById('name').value, 
-                weight: document.getElementById('weight').value, 
-                program: document.getElementById('program').value, 
-                membership: document.getElementById('membership').value, 
-                age: 25, height: 175 
-            };
-            const res = await fetch('/save_client', { 
-                method: 'POST', 
-                headers: {'Content-Type': 'application/json'}, 
-                body: JSON.stringify(data)
-            });
-            const result = await res.json();
-            document.getElementById('summary').innerText = `Saved! Calories: ${result.calories}`;
-        }
-        async function generateAI() {
-            const level = prompt("Enter experience (beginner/intermediate/advanced):");
-            const res = await fetch('/generate_ai', { 
-                method: 'POST', 
-                headers: {'Content-Type': 'application/json'}, 
-                body: JSON.stringify({name: document.getElementById('name').value, level})
-            });
+            const payload = { name: document.getElementById('name').value, weight: document.getElementById('weight').value, program: document.getElementById('program').value };
+            const res = await fetch('/save_client', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) });
             const data = await res.json();
-            const tbody = document.querySelector("#progTable tbody");
-            tbody.innerHTML = data
+            if(data.status === "success") updateChart(payload.name);
+        }
+        async function updateChart(name) {
+            const res = await fetch(`/get_analytics/${encodeURIComponent(name)}`);
+            const d = await res.json();
+            const ctx = document.getElementById('analyticsChart').getContext('2d');
+            if(myChart) myChart.destroy();
+            myChart = new Chart(ctx, {
+                type: 'line',
+                data: { labels: d.dates, datasets: [{ label: 'Weight (kg)', data: d.weights, borderColor: '#d4af37', tension: 0.3, fill: true, backgroundColor: 'rgba(212,175,55,0.1)' }]},
+                options: { responsive: true }
+            });
+        }
+    </script>
+</body>
+</html>
