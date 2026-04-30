@@ -152,10 +152,14 @@ def generate_program(name):
     for d in days:
         exs = random.sample(EXERCISES_POOL["Full Body"], k=3)
         for e in exs:
-            prog.append({"day": d, "exercise": e,
-                         "sets": random.randint(*config['sets']),
-                         "reps": random.randint(8, 12)})
+            prog.append({
+                "day": d,
+                "exercise": e,
+                "sets": random.randint(*config['sets']),
+                "reps": random.randint(8, 12)
+            })
     return jsonify({"program": prog})
+
 
 @app.route('/export_pdf/<name>')
 def export_pdf(name):
