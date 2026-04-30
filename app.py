@@ -35,6 +35,14 @@ def init_db():
         conn.execute("""CREATE TABLE IF NOT EXISTS clients (
             id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE, age INTEGER, height REAL, weight REAL, 
             program TEXT, calories INTEGER, membership_expiry TEXT)""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS workouts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            client_name TEXT, date TEXT, workout_type TEXT,
+            duration_min INTEGER, notes TEXT)""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS exercises (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            workout_id INTEGER, name TEXT,
+            sets INTEGER, reps INTEGER, weight REAL)""")
 
 @app.route('/')
 def index():
@@ -54,8 +62,8 @@ def login():
             if row:
                 session['user'], session['role'] = row['username'], row['role']
                 return redirect(url_for('index'))
-        # If login fails, show error message
-        return render_template('login.html', error="Invalid username or password")
+        # Match test expectation: "Invalid Credentials"
+        return render_template('login.html', error="Invalid Credentials")
     return render_template('login.html')
 
 @app.route('/save_client', methods=['POST'])
@@ -69,7 +77,11 @@ def save_client():
             (data['name'], data['age'], data['height'], data['weight'], data['program'], calories, data['membership'])
         )
     return jsonify({"status": "success", "calories": calories})
-if __name__ == '__main__':
-    init_db()
-    print("Starting Flask server on http://127.0.0.1:5000")
-    app.run(debug=True)
+
+@app.route('/generate_ai', methods=['POST'])
+def generate_ai():
+    data = request.json
+    level = data['level'].lower()
+    config_map = {
+        "beginner": {"sets": (2,3), "days": 3},
+        "intermediate": {"sets
