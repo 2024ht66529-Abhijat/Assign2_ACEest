@@ -42,7 +42,6 @@ def index():
     progress = conn.execute("SELECT * FROM progress ORDER BY id DESC LIMIT 10").fetchall()
     return render_template('index.html', clients=clients, progress=progress, programs=PROGRAMS.keys())
 
-# --- Form-based route (HTML + flash) ---
 @app.route('/add_client', methods=['POST'])
 def add_client():
     name = request.form['name']
@@ -65,7 +64,6 @@ def add_client():
     flash("Client added successfully!")
     return redirect(url_for('index'))
 
-# --- JSON API route (for tests) ---
 @app.route('/save_client', methods=['POST'])
 def save_client():
     data = request.get_json()
@@ -103,19 +101,16 @@ def add_progress():
     flash("Progress logged successfully!")
     return redirect(url_for('index'))
 
-# --- New relational route ---
 @app.route('/log_workout', methods=['POST'])
 def log_workout():
     data = request.get_json()
     try:
         with get_db() as conn:
-            # Insert workout
             conn.execute("""INSERT INTO workouts (client_name, date, workout_type, duration_min, notes)
                             VALUES (?, ?, ?, ?, ?)""",
                          (data['client_name'], data['date'], data['type'], data['duration'], data['notes']))
             workout_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
 
-            # Insert linked exercise
             conn.execute("""INSERT INTO exercises (workout_id, name, sets, reps, weight)
                             VALUES (?, ?, ?, ?, ?)""",
                          (workout_id, data['exercise_name'], data['sets'], data['reps'], data['ex_weight']))
