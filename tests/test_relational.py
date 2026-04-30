@@ -1,3 +1,5 @@
+import pytest
+from app import app, get_db, DB_NAME
 def test_workout_exercise_linking(client):
     payload = {
         "client_name": "Arjun",
