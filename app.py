@@ -76,6 +76,9 @@ def init_db():
             weight REAL
         )""")
 
+# Ensure schema is initialized at import time (important for pytest)
+init_db()
+
 @app.route('/')
 def dashboard():
     if 'user' not in session:
@@ -172,5 +175,4 @@ def logout():
     return redirect(url_for('login'))
 
 if __name__ == '__main__':
-    init_db()
     app.run(debug=True)
