@@ -1,15 +1,14 @@
-from flask import Flask, render_template, request, redirect, url_for, flash
+from flask import Flask, render_template, request, jsonify
 import sqlite3
+from datetime import datetime
 
 app = Flask(__name__)
-app.secret_key = "aceest_secret"
 DB_NAME = "aceest_fitness.db"
 
-# --- Program Factors from your Tkinter code ---
 PROGRAMS = {
-    "Fat Loss (FL)": 22,
-    "Muscle Gain (MG)": 35,
-    "Beginner (BG)": 26
+    "Fat Loss (FL)": {"factor": 22},
+    "Muscle Gain (MG)": {"factor": 35},
+    "Beginner (BG)": {"factor": 26}
 }
 
 def get_db():
@@ -19,60 +18,48 @@ def get_db():
 
 def init_db():
     with get_db() as conn:
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS clients (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT UNIQUE, age INTEGER, weight REAL,
-                program TEXT, calories INTEGER
-            )""")
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS progress (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                client_name TEXT, week TEXT, adherence INTEGER
-            )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS clients (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE,
+            age INTEGER, weight REAL, program TEXT, calories INTEGER)""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS progress (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, client_name TEXT,
+            week TEXT, adherence INTEGER)""")
 
 @app.route('/')
 def index():
-    conn = get_db()
-    clients = conn.execute("SELECT * FROM clients").fetchall()
-    progress = conn.execute("SELECT * FROM progress ORDER BY id DESC LIMIT 10").fetchall()
-    return render_template('index.html', clients=clients, progress=progress, programs=PROGRAMS.keys())
+    return render_template('index.html', programs=PROGRAMS.keys())
 
-@app.route('/add_client', methods=['POST'])
-def add_client():
-    name = request.form['name']
-    age = request.form['age']
-    weight = float(request.form['weight'])
-    program = request.form['program']
+@app.route('/save_client', methods=['POST'])
+def save_client():
+    data = request.json
+    factor = PROGRAMS[data['program']]['factor']
+    calories = int(float(data['weight']) * factor)
     
-    # Matching your Tkinter calorie calculation factor
-    calories = int(weight * PROGRAMS.get(program, 26))
-    
-    conn = get_db()
-    # Check for duplicate before insert
-    existing = conn.execute("SELECT * FROM clients WHERE name = ?", (name,)).fetchone()
-    if existing:
-        flash("Client already exists!")
-        return redirect(url_for('index'))
+    try:
+        with get_db() as conn:
+            conn.execute("""INSERT OR REPLACE INTO clients 
+                (name, age, weight, program, calories) VALUES (?, ?, ?, ?, ?)""",
+                (data['name'], data['age'], data['weight'], data['program'], calories))
+        return jsonify({"status": "success", "message": "Client data saved"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 400
 
-    conn.execute("INSERT INTO clients (name, age, weight, program, calories) VALUES (?,?,?,?,?)",
-                 (name, age, weight, program, calories))
-    conn.commit()
-    flash("Client added successfully!")
-    return redirect(url_for('index'))
+@app.route('/load_client/<name>')
+def load_client(name):
+    with get_db() as conn:
+        row = conn.execute("SELECT * FROM clients WHERE name=?", (name,)).fetchone()
+    if row:
+        return jsonify(dict(row))
+    return jsonify({"status": "error", "message": "Client not found"}), 404
 
-@app.route('/add_progress', methods=['POST'])
-def add_progress():
-    client_name = request.form['client_name']
-    week = request.form['week']
-    adherence = request.form['adherence']
-    
-    conn = get_db()
-    conn.execute("INSERT INTO progress (client_name, week, adherence) VALUES (?,?,?)",
-                 (client_name, week, adherence))
-    conn.commit()
-    flash("Progress logged successfully!")
-    return redirect(url_for('index'))
+@app.route('/save_progress', methods=['POST'])
+def save_progress():
+    data = request.json
+    week = datetime.now().strftime("Week %U - %Y")
+    with get_db() as conn:
+        conn.execute("INSERT INTO progress (client_name, week, adherence) VALUES (?, ?, ?)",
+                    (data['name'], week, data['adherence']))
+    return jsonify({"status": "success", "message": f"Progress logged for {week}"})
 
 if __name__ == '__main__':
     init_db()
