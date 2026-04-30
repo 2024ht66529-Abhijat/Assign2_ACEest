@@ -28,11 +28,31 @@
         table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 14px; }
         th, td { border-bottom: 1px solid #444; padding: 10px; text-align: left; }
         th { color: var(--gold); }
+
+        /* Flash message styling */
+        .flash-container {
+            background-color: var(--gold);
+            color: black;
+            padding: 10px;
+            margin: 10px 20px;
+            border-radius: 5px;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
 
 <div class="header">ACEest Functional Fitness System</div>
+
+{% with messages = get_flashed_messages() %}
+  {% if messages %}
+    <div class="flash-container">
+      {% for message in messages %}
+        <p>{{ message }}</p>
+      {% endfor %}
+    </div>
+  {% endif %}
+{% endwith %}
 
 <div class="main-container">
     <!-- LEFT PANEL: Client Management -->

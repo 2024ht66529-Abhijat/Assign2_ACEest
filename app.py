@@ -48,13 +48,17 @@ def add_client():
     # Matching your Tkinter calorie calculation factor
     calories = int(weight * PROGRAMS.get(program, 26))
     
-    try:
-        conn = get_db()
-        conn.execute("INSERT INTO clients (name, age, weight, program, calories) VALUES (?,?,?,?,?)",
-                     (name, age, weight, program, calories))
-        conn.commit()
-    except sqlite3.IntegrityError:
+    conn = get_db()
+    # Check for duplicate before insert
+    existing = conn.execute("SELECT * FROM clients WHERE name = ?", (name,)).fetchone()
+    if existing:
         flash("Client already exists!")
+        return redirect(url_for('index'))
+
+    conn.execute("INSERT INTO clients (name, age, weight, program, calories) VALUES (?,?,?,?,?)",
+                 (name, age, weight, program, calories))
+    conn.commit()
+    flash("Client added successfully!")
     return redirect(url_for('index'))
 
 @app.route('/add_progress', methods=['POST'])
@@ -67,6 +71,7 @@ def add_progress():
     conn.execute("INSERT INTO progress (client_name, week, adherence) VALUES (?,?,?)",
                  (client_name, week, adherence))
     conn.commit()
+    flash("Progress logged successfully!")
     return redirect(url_for('index'))
 
 if __name__ == '__main__':
