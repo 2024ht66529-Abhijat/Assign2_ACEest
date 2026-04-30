@@ -84,4 +84,48 @@ def generate_ai():
     level = data['level'].lower()
     config_map = {
         "beginner": {"sets": (2,3), "days": 3},
-        "intermediate": {"sets
+        "intermediate": {"sets": (3,4), "days": 4},
+        "advanced": {"sets": (4,5), "days": 5}
+    }
+    config = config_map.get(level)
+    if not config:
+        return jsonify([])
+
+    days = ["Mon", "Tue", "Wed", "Thu", "Fri"][:config['days']]
+    prog = []
+    for d in days:
+        exs = random.sample(EXERCISES_POOL["Full Body"], k=3)
+        for e in exs:
+            prog.append({"day": d, "exercise": e, "sets": random.randint(*config['sets']), "reps": random.randint(8, 12)})
+    return jsonify(prog)
+
+@app.route('/export_pdf/<name>')
+def export_pdf(name):
+    with get_db() as conn:
+        row = conn.execute("SELECT * FROM clients WHERE name=?", (name,)).fetchone()
+    if not row:
+        return jsonify({"error": "Client not found"}), 404
+
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", "B", 16)
+    pdf.cell(0, 10, f"Client Report - {row['name']}", ln=True, align="C")
+    return send_file(io.BytesIO(pdf.output(dest='S').encode('latin-1')), mimetype='application/pdf', as_attachment=True, download_name=f"{name}.pdf")
+
+@app.route('/log_workout', methods=['POST'])
+def log_workout():
+    data = request.json
+    with get_db() as conn:
+        conn.execute("""INSERT INTO workouts (client_name, date, workout_type, duration_min, notes)
+                        VALUES (?, ?, ?, ?, ?)""",
+                     (data['client_name'], data['date'], data['type'], data['duration'], data['notes']))
+        workout_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        conn.execute("""INSERT INTO exercises (workout_id, name, sets, reps, weight)
+                        VALUES (?, ?, ?, ?, ?)""",
+                     (workout_id, data['exercise_name'], data['sets'], data['reps'], data['ex_weight']))
+    return jsonify({"status": "success", "workout_id": workout_id})
+
+if __name__ == '__main__':
+    init_db()
+    print("Starting Flask server on http://127.0.0.1:5000")
+    app.run(debug=True)
