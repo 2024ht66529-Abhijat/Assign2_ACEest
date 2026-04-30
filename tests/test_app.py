@@ -1,29 +1,30 @@
 import pytest
-from app import app
+from app import app, clients_list
 
 @pytest.fixture
 def client():
+    clients_list.clear() # Reset list before tests
     with app.test_client() as client:
         yield client
 
-def test_calorie_calculation_logic(client):
-    """Verify Weight (100kg) * MG Factor (35) = 3500 kcal."""
-    payload = {"program": "Muscle Gain (MG)", "weight": 100}
-    response = client.post('/calculate', json=payload)
+def test_save_client_and_calculation(client):
+    """Verify data reaches the list and calories calculate (70kg * 22 for FL)."""
+    payload = {
+        "name": "Arjun", "age": 28, "weight": 70, 
+        "program": "Fat Loss (FL)", "adherence": 85, "notes": "Strong start"
+    }
+    response = client.post('/save_client', json=payload)
     data = response.get_json()
     
     assert response.status_code == 200
-    assert data['calories'] == 3500
-    assert "Chicken Biryani" in data['diet']
+    assert data['clients'][0]['calories'] == 1540
+    assert len(clients_list) == 1
 
-def test_empty_weight_handling(client):
-    """Ensure app handles zero weight gracefully."""
-    payload = {"program": "Beginner (BG)", "weight": 0}
-    response = client.post('/calculate', json=payload)
-    assert response.get_json()['calories'] == "--"
-
-def test_workout_color_assignment(client):
-    """Check if Fat Loss returns the correct e74c3c hex code."""
-    payload = {"program": "Fat Loss (FL)", "weight": 70}
-    response = client.post('/calculate', json=payload)
-    assert response.get_json()['color'] == "#e74c3c"
+def test_csv_export(client):
+    """Ensure CSV is generated with the correct headers."""
+    client.post('/save_client', json={"name": "Test", "age": 20, "weight": 60, "program": "Beginner (BG)", "adherence": 100, "notes": "N/A"})
+    response = client.get('/export_csv')
+    
+    assert response.status_code == 200
+    assert b"Name,Age,Weight,Program,Adherence,Notes" in response.data
+    assert b"Test" in response.data

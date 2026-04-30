@@ -1,86 +1,104 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>ACEest Fitness & Performance</title>
+    <title>ACEest Fitness v2</title>
+    <script src="https://jsdelivr.net"></script>
     <style>
         :root { --gold: #d4af37; --dark: #1a1a1a; --panel: #222; }
-        body { background: var(--dark); color: white; font-family: Helvetica, Arial; margin: 0; }
-        .header { background: var(--gold); color: black; padding: 20px; text-align: center; font-weight: bold; font-size: 24px; }
-        
-        .main { display: grid; grid-template-columns: 350px 1fr; gap: 20px; padding: 20px; }
-        
-        /* Left Panel - Client Profile */
-        .left-panel { border: 2px solid var(--gold); padding: 20px; background: var(--panel); }
-        .input-group { margin-bottom: 15px; }
-        label { display: block; margin-bottom: 5px; color: var(--gold); font-weight: bold; }
-        input, select { width: 100%; padding: 8px; background: #333; border: 1px solid #444; color: white; border-radius: 4px; }
-        
-        /* Right Panel - Details */
-        .right-panel { display: flex; flex-direction: column; gap: 15px; }
-        .text-block { border: 1px solid var(--gold); background: #111; padding: 15px; height: 200px; overflow-y: auto; white-space: pre-wrap; }
-        .block-title { color: var(--gold); font-size: 14px; font-weight: bold; margin-bottom: 5px; }
-        .kcal-display { font-size: 20px; color: var(--gold); text-align: center; margin-top: 10px; border: 1px dashed var(--gold); padding: 10px; }
-        
-        button { width: 100%; padding: 10px; margin-top: 10px; cursor: pointer; font-weight: bold; }
-        .btn-save { background: var(--gold); border: none; }
-        .btn-reset { background: transparent; border: 1px solid var(--gold); color: var(--gold); }
+        body { background: var(--dark); color: white; font-family: Arial; margin: 0; }
+        .header { background: var(--gold); color: black; padding: 15px; text-align: center; font-size: 24px; font-weight: bold; }
+        .main { display: grid; grid-template-columns: 320px 1fr; gap: 20px; padding: 20px; }
+        .panel { border: 1px solid var(--gold); padding: 15px; background: var(--panel); margin-bottom: 10px; }
+        input, select { width: 100%; padding: 8px; margin: 5px 0; background: #333; color: white; border: 1px solid #555; }
+        button { width: 100%; padding: 10px; margin-top: 5px; cursor: pointer; font-weight: bold; background: var(--gold); border: none; }
+        table { width: 100%; border-collapse: collapse; background: #111; margin-top: 10px; }
+        th, td { border: 1px solid #444; padding: 8px; text-align: left; font-size: 13px; }
+        th { color: var(--gold); }
+        .chart-container { background: #fff; padding: 10px; border-radius: 5px; margin-top: 10px; height: 250px; }
     </style>
 </head>
 <body>
-    <div class="header">ACEest FUNCTIONAL FITNESS SYSTEM</div>
+    <div class="header">ACEest FUNCTIONAL FITNESS SYSTEM v2</div>
     <div class="main">
-        <div class="left-panel">
-            <div class="panel-title" style="color:var(--gold); margin-bottom:15px;">Client Profile</div>
-            <div class="input-group"><label>Name</label><input type="text" id="name"></div>
-            <div class="input-group"><label>Age</label><input type="number" id="age"></div>
-            <div class="input-group"><label>Weight (kg)</label><input type="number" id="weight" oninput="updateUI()"></div>
-            <div class="input-group">
+        <div class="left">
+            <div class="panel">
+                <label>Name</label><input type="text" id="name">
+                <label>Age</label><input type="number" id="age">
+                <label>Weight (kg)</label><input type="number" id="weight">
                 <label>Program</label>
-                <select id="program" onchange="updateUI()">
+                <select id="program">
                     <option value="">-- Select --</option>
-                    {% for p in programs %}<option value="{{p}}">{{p}}</option>{% endfor %}
+                    {% for p in programs %}<option>{{p}}</option>{% endfor %}
                 </select>
+                <label>Adherence (%)</label><input type="range" id="adherence" min="0" max="100">
+                <label>Coach Notes</label><input type="text" id="notes">
+                <button onclick="saveClient()">Save Client</button>
+                <button style="background:transparent; color:var(--gold); border:1px solid var(--gold);" onclick="window.location.href='/export_csv'">Export CSV</button>
             </div>
-            <div class="input-group">
-                <label>Weekly Adherence (%): <span id="adhVal">0</span>%</label>
-                <input type="range" id="adherence" min="0" max="100" value="0" oninput="document.getElementById('adhVal').innerText=this.value">
-            </div>
-            <button class="btn-save" onclick="alert('Client Saved Locally!')">Save Client</button>
-            <button class="btn-reset" onclick="location.reload()">Reset</button>
         </div>
-
-        <div class="right-panel">
-            <div>
-                <div class="block-title">Weekly Training Plan</div>
-                <div id="workout" class="text-block">Select profile to view...</div>
+        <div class="right">
+            <div id="details" class="panel" style="display:none;">
+                <h3 id="detTitle" style="color:var(--gold)">Plan Details</h3>
+                <p id="detWork"></p><p id="detDiet"></p>
+                <h4 id="detKcal" style="color:var(--gold)"></h4>
             </div>
-            <div>
-                <div class="block-title">Nutrition Plan (TN Context)</div>
-                <div id="diet" class="text-block">Select profile to view...</div>
+            <div class="panel">
+                <table id="clientTable">
+                    <thead><tr><th>Name</th><th>Age</th><th>Weight</th><th>Program</th><th>Adh%</th><th>Notes</th></tr></thead>
+                    <tbody></tbody>
+                </table>
             </div>
-            <div id="calories" class="kcal-display">Estimated Calories: --</div>
+            <div class="panel">
+                <div class="chart-container"><canvas id="progressChart"></canvas></div>
+            </div>
         </div>
     </div>
 
     <script>
-        async function updateUI() {
-            const program = document.getElementById('program').value;
-            const weight = document.getElementById('weight').value;
-            if (!program) return;
-
-            const res = await fetch('/calculate', {
+        let myChart;
+        async function saveClient() {
+            const payload = {
+                name: document.getElementById('name').value,
+                age: document.getElementById('age').value,
+                weight: document.getElementById('weight').value,
+                program: document.getElementById('program').value,
+                adherence: document.getElementById('adherence').value,
+                notes: document.getElementById('notes').value
+            };
+            const res = await fetch('/save_client', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ program, weight })
+                body: JSON.stringify(payload)
             });
             const data = await res.json();
+            updateUI(data.clients);
+        }
+
+        function updateUI(clients) {
+            const last = clients[clients.length - 1];
+            document.getElementById('details').style.display = 'block';
+            document.getElementById('detWork').innerText = "Workout: " + last.workout;
+            document.getElementById('detWork').style.color = last.color;
+            document.getElementById('detDiet').innerText = "Diet: " + last.diet;
+            document.getElementById('detKcal').innerText = `Estimated: ${last.calories} kcal`;
+
+            const tbody = document.querySelector('#clientTable tbody');
+            tbody.innerHTML = clients.map(c => `<tr><td>${c.name}</td><td>${c.age}</td><td>${c.weight}</td><td>${c.program}</td><td>${c.adherence}%</td><td>${c.notes}</td></tr>`).join('');
             
-            const workBox = document.getElementById('workout');
-            workBox.innerText = data.workout;
-            workBox.style.color = data.color;
-            
-            document.getElementById('diet').innerText = data.diet;
-            document.getElementById('calories').innerText = `Estimated Calories: ${data.calories} kcal`;
+            updateChart(clients);
+        }
+
+        function updateChart(clients) {
+            const ctx = document.getElementById('progressChart').getContext('2d');
+            if (myChart) myChart.destroy();
+            myChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: clients.map(c => c.name),
+                    datasets: [{ label: 'Adherence %', data: clients.map(c => c.adherence), backgroundColor: '#d4af37' }]
+                },
+                options: { maintainAspectRatio: false, scales: { y: { beginAtZero: true, max: 100 } } }
+            });
         }
     </script>
 </body>

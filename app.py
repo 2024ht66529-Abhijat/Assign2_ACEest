@@ -1,52 +1,59 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, Response
+import csv
+import io
 
 app = Flask(__name__)
 
-# Data combined from your latest Tkinter update
+# Core Data
 PROGRAMS = {
-    "Fat Loss (FL)": {
-        "workout": "Mon: Back Squat 5x5 + Core\nTue: EMOM 20min Assault Bike\nWed: Bench Press + 21-15-9\nThu: Deadlift + Box Jumps\nFri: Zone 2 Cardio 30min",
-        "diet": "Breakfast: Egg Whites + Oats\nLunch: Grilled Chicken + Brown Rice\nDinner: Fish Curry + Millet Roti\nTarget: ~2000 kcal",
-        "color": "#e74c3c",
-        "calorie_factor": 22
-    },
-    "Muscle Gain (MG)": {
-        "workout": "Mon: Squat 5x5\nTue: Bench 5x5\nWed: Deadlift 4x6\nThu: Front Squat 4x8\nFri: Incline Press 4x10\nSat: Barbell Rows 4x10",
-        "diet": "Breakfast: Eggs + Peanut Butter Oats\nLunch: Chicken Biryani\nDinner: Mutton Curry + Rice\nTarget: ~3200 kcal",
-        "color": "#2ecc71",
-        "calorie_factor": 35
-    },
-    "Beginner (BG)": {
-        "workout": "Full Body Circuit:\n- Air Squats\n- Ring Rows\n- Push-ups\nFocus: Technique & Consistency",
-        "diet": "Balanced Tamil Meals\nIdli / Dosa / Rice + Dal\nProtein Target: 120g/day",
-        "color": "#3498db",
-        "calorie_factor": 26
-    }
+    "Fat Loss (FL)": {"workout": "Back Squat, Cardio, Bench, Deadlift, Recovery", "diet": "Egg Whites, Chicken, Fish Curry", "color": "#e74c3c", "calorie_factor": 22},
+    "Muscle Gain (MG)": {"workout": "Squat, Bench, Deadlift, Press, Rows", "diet": "Eggs, Biryani, Mutton Curry", "color": "#2ecc71", "calorie_factor": 35},
+    "Beginner (BG)": {"workout": "Air Squats, Ring Rows, Push-ups", "diet": "Balanced Tamil Meals", "color": "#3498db", "calorie_factor": 26}
 }
+
+# In-memory store matching your Tkinter self.clients
+clients_list = []
 
 @app.route('/')
 def index():
     return render_template('index.html', programs=PROGRAMS)
 
-@app.route('/calculate', methods=['POST'])
-def calculate():
+@app.route('/save_client', methods=['POST'])
+def save_client():
     data = request.json
-    program_key = data.get('program')
+    # Calorie calculation logic
+    program = PROGRAMS.get(data['program'])
     weight = float(data.get('weight', 0))
+    calories = int(weight * program['calorie_factor']) if weight > 0 else 0
     
-    program = PROGRAMS.get(program_key)
-    if not program:
-        return jsonify({"error": "Invalid program"}), 400
-    
-    # Matching your self.weight_var.get() * data["calorie_factor"] logic
-    calories = int(weight * program['calorie_factor']) if weight > 0 else "--"
-    
-    return jsonify({
-        "workout": program['workout'],
-        "diet": program['diet'],
+    client_entry = {
+        "name": data['name'],
+        "age": data['age'],
+        "weight": weight,
+        "program": data['program'],
+        "adherence": int(data['adherence']),
+        "notes": data['notes'],
+        "calories": calories,
         "color": program['color'],
-        "calories": calories
-    })
+        "workout": program['workout'],
+        "diet": program['diet']
+    }
+    clients_list.append(client_entry)
+    return jsonify({"status": "success", "clients": clients_list})
+
+@app.route('/export_csv')
+def export_csv():
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Name", "Age", "Weight", "Program", "Adherence", "Notes"])
+    for c in clients_list:
+        writer.writerow([c['name'], c['age'], c['weight'], c['program'], c['adherence'], c['notes']])
+    
+    return Response(
+        output.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-disposition": "attachment; filename=clients.csv"}
+    )
 
 if __name__ == '__main__':
     app.run(debug=True)
