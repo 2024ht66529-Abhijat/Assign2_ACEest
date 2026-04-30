@@ -79,7 +79,7 @@ def save_client():
         conn = get_db()
         existing = conn.execute("SELECT * FROM clients WHERE name = ?", (name,)).fetchone()
         if existing:
-            return jsonify({"error": "Client already exists!"}), 400
+            return jsonify({"status": "error", "message": "Client already exists!", "calories": None}), 400
 
         conn.execute("""INSERT INTO clients (name, age, height, weight, program, calories, target_weight, target_adherence)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
@@ -88,7 +88,7 @@ def save_client():
         conn.commit()
         return jsonify({"status": "success", "calories": calories})
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 400
+        return jsonify({"status": "error", "message": str(e), "calories": None}), 400
 
 @app.route('/add_progress', methods=['POST'])
 def add_progress():
@@ -102,6 +102,27 @@ def add_progress():
     conn.commit()
     flash("Progress logged successfully!")
     return redirect(url_for('index'))
+
+# --- New relational route ---
+@app.route('/log_workout', methods=['POST'])
+def log_workout():
+    data = request.get_json()
+    try:
+        with get_db() as conn:
+            # Insert workout
+            conn.execute("""INSERT INTO workouts (client_name, date, workout_type, duration_min, notes)
+                            VALUES (?, ?, ?, ?, ?)""",
+                         (data['client_name'], data['date'], data['type'], data['duration'], data['notes']))
+            workout_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+            # Insert linked exercise
+            conn.execute("""INSERT INTO exercises (workout_id, name, sets, reps, weight)
+                            VALUES (?, ?, ?, ?, ?)""",
+                         (workout_id, data['exercise_name'], data['sets'], data['reps'], data['ex_weight']))
+            conn.commit()
+        return jsonify({"status": "success", "workout_id": workout_id})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 400
 
 @app.route('/workout_history/<name>')
 def workout_history(name):
