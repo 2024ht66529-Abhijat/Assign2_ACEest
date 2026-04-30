@@ -3,17 +3,18 @@ import os
 import io
 import sqlite3
 from app import app, init_db, DB_NAME, get_db
+
 @pytest.fixture
 def client():
-"""Configures the app for testing and provides a clean database for each test."""
-app.config['TESTING'] = True
-app.config['SECRET_KEY'] = 'test_secret'
-# Ensure we use a fresh test database
-if os.path.exists(DB_NAME):
-os.remove(DB_NAME)
-init_db()
-with app.test_client() as client:
-yield client
+    """Configures the app for testing and provides a clean database for each test."""
+    app.config['TESTING'] = True
+    app.config['SECRET_KEY'] = 'test_secret'
+    # Ensure we use a fresh test database
+    if os.path.exists(DB_NAME):
+        os.remove(DB_NAME)
+    init_db()
+    with app.test_client() as client:
+        yield client
 --- 1. AUTHENTICATION TESTS ---
 def test_login_and_session(client):
 """Verify that valid admin credentials grant access to the session."""
