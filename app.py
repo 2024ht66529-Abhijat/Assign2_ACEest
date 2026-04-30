@@ -20,34 +20,43 @@ def get_db():
 
 def init_db():
     with get_db() as conn:
-        # Users table
-        conn.execute("""CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, 
-            username TEXT UNIQUE, 
-            password TEXT, 
-            role TEXT)""")
+        # Drop old tables to avoid schema mismatch in CI/CD
+        conn.execute("DROP TABLE IF EXISTS users")
+        conn.execute("DROP TABLE IF EXISTS clients")
+        conn.execute("DROP TABLE IF EXISTS workouts")
+        conn.execute("DROP TABLE IF EXISTS exercises")
+
+        conn.execute("CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT UNIQUE, password TEXT, role TEXT)")
         conn.execute("INSERT OR IGNORE INTO users (username, password, role) VALUES ('admin','admin','Admin')")
 
-        # Clients table - MUST HAVE HEIGHT
-        conn.execute("""CREATE TABLE IF NOT EXISTS clients (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, 
-            name TEXT UNIQUE, 
-            age INTEGER, 
-            height REAL, 
-            weight REAL, 
-            program TEXT, 
-            calories INTEGER, 
-            membership_end TEXT)""")
+        conn.execute("""CREATE TABLE clients (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE,
+            age INTEGER,
+            height REAL,
+            weight REAL,
+            program TEXT,
+            calories INTEGER,
+            membership_expiry TEXT
+        )""")
 
-        # Metrics table
-        conn.execute("""CREATE TABLE IF NOT EXISTS metrics (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, 
-            client_name TEXT, 
-            date TEXT, 
-            weight REAL)""")
-        conn.commit()
+        conn.execute("""CREATE TABLE workouts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            client_name TEXT,
+            date TEXT,
+            workout_type TEXT,
+            duration_min INTEGER,
+            notes TEXT
+        )""")
 
-
+        conn.execute("""CREATE TABLE exercises (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            workout_id INTEGER,
+            name TEXT,
+            sets INTEGER,
+            reps INTEGER,
+            weight REAL
+        )""")
 
     
 @app.route('/')
