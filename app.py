@@ -134,6 +134,29 @@ def generate_ai():
             prog.append({"day": d, "exercise": e, "sets": random.randint(*config['sets']), "reps": random.randint(8, 12)})
     return jsonify(prog)
 
+@app.route('/generate_program/<name>', methods=['POST'])
+def generate_program(name):
+    # Default to beginner if no level provided
+    level = request.json.get('level', 'beginner').lower() if request.json else 'beginner'
+    config_map = {
+        "beginner": {"sets": (2,3), "days": 3},
+        "intermediate": {"sets": (3,4), "days": 4},
+        "advanced": {"sets": (4,5), "days": 5}
+    }
+    config = config_map.get(level)
+    if not config:
+        return jsonify({"program": []})
+
+    days = ["Mon", "Tue", "Wed", "Thu", "Fri"][:config['days']]
+    prog = []
+    for d in days:
+        exs = random.sample(EXERCISES_POOL["Full Body"], k=3)
+        for e in exs:
+            prog.append({"day": d, "exercise": e,
+                         "sets": random.randint(*config['sets']),
+                         "reps": random.randint(8, 12)})
+    return jsonify({"program": prog})
+
 @app.route('/export_pdf/<name>')
 def export_pdf(name):
     with get_db() as conn:
