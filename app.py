@@ -2,53 +2,51 @@ from flask import Flask, render_template, request, jsonify
 
 app = Flask(__name__)
 
-PROGRAM_DATA = {
+# Data combined from your latest Tkinter update
+PROGRAMS = {
     "Fat Loss (FL)": {
-        "workout": "Mon: 5x5 Back Squat + AMRAP\nTue: EMOM 20min Assault Bike\nWed: Bench Press + 21-15-9\nThu: 10RFT Deadlifts/Box Jumps\nFri: 30min Active Recovery",
-        "diet": "B: 3 Egg Whites + Oats Idli\nL: Grilled Chicken + Brown Rice\nD: Fish Curry + Millet Roti\nTarget: 2,000 kcal",
-        "color": "#e74c3c"
+        "workout": "Mon: Back Squat 5x5 + Core\nTue: EMOM 20min Assault Bike\nWed: Bench Press + 21-15-9\nThu: Deadlift + Box Jumps\nFri: Zone 2 Cardio 30min",
+        "diet": "Breakfast: Egg Whites + Oats\nLunch: Grilled Chicken + Brown Rice\nDinner: Fish Curry + Millet Roti\nTarget: ~2000 kcal",
+        "color": "#e74c3c",
+        "calorie_factor": 22
     },
     "Muscle Gain (MG)": {
         "workout": "Mon: Squat 5x5\nTue: Bench 5x5\nWed: Deadlift 4x6\nThu: Front Squat 4x8\nFri: Incline Press 4x10\nSat: Barbell Rows 4x10",
-        "diet": "B: 4 Eggs + PB Oats\nL: Chicken Biryani (250g Chicken)\nD: Mutton Curry + Jeera Rice\nTarget: 3,200 kcal",
-        "color": "#2ecc71"
+        "diet": "Breakfast: Eggs + Peanut Butter Oats\nLunch: Chicken Biryani\nDinner: Mutton Curry + Rice\nTarget: ~3200 kcal",
+        "color": "#2ecc71",
+        "calorie_factor": 35
     },
     "Beginner (BG)": {
-        "workout": "Circuit Training: Air Squats, Ring Rows, Push-ups.\nFocus: Technique Mastery & Form (90% Threshold)",
-        "diet": "Balanced Tamil Meals: Idli-Sambar, Rice-Dal, Chapati.\nProtein: 120g/day",
-        "color": "#3498db"
+        "workout": "Full Body Circuit:\n- Air Squats\n- Ring Rows\n- Push-ups\nFocus: Technique & Consistency",
+        "diet": "Balanced Tamil Meals\nIdli / Dosa / Rice + Dal\nProtein Target: 120g/day",
+        "color": "#3498db",
+        "calorie_factor": 26
     }
 }
 
 @app.route('/')
 def index():
-    return render_template('index.html', programs=PROGRAM_DATA)
+    return render_template('index.html', programs=PROGRAMS)
 
-@app.route('/get_plan/<program_name>')
-def get_plan(program_name):
-    plan = PROGRAM_DATA.get(program_name)
-    if plan:
-        return jsonify(plan)
-    return jsonify({"error": "Plan not found"}), 404
-
-
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
-        # For demo purposes, accept any non-empty credentials
-        if username and password:
-            return jsonify({"message": f"Welcome, {username}!"})
-        return jsonify({"error": "Invalid credentials"}), 401
-    # For GET requests, return a simple HTML login form
-    return '''
-        <form method="post">
-            <label>Username:</label><input type="text" name="username"><br>
-            <label>Password:</label><input type="password" name="password"><br>
-            <input type="submit" value="Login">
-        </form>
-    '''
+@app.route('/calculate', methods=['POST'])
+def calculate():
+    data = request.json
+    program_key = data.get('program')
+    weight = float(data.get('weight', 0))
+    
+    program = PROGRAMS.get(program_key)
+    if not program:
+        return jsonify({"error": "Invalid program"}), 400
+    
+    # Matching your self.weight_var.get() * data["calorie_factor"] logic
+    calories = int(weight * program['calorie_factor']) if weight > 0 else "--"
+    
+    return jsonify({
+        "workout": program['workout'],
+        "diet": program['diet'],
+        "color": program['color'],
+        "calories": calories
+    })
 
 if __name__ == '__main__':
     app.run(debug=True)

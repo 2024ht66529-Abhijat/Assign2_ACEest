@@ -1,44 +1,29 @@
 import pytest
-import os
-import sys
-
-# Ensure the root directory is in the path so we can import app.py
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 from app import app
 
 @pytest.fixture
 def client():
-    app.config['TESTING'] = True
     with app.test_client() as client:
         yield client
 
-def test_dashboard_header_exists(client):
-    """Check if the Tamil Nadu Context header exists on the main page."""
-    response = client.get('/')
-    assert response.status_code == 200
-    # Verifies the static label in your HTML
-    assert b"Daily Nutrition Plan (Tamil Nadu Context)" in response.data
-
-def test_beginner_diet_tamil_context(client):
-    """Verify that the Beginner (BG) plan returns Tamil-specific diet items."""
-    # We encode the URL to handle spaces: Beginner (BG) -> Beginner%20(BG)
-    response = client.get('/get_plan/Beginner%20(BG)')
-    assert response.status_code == 200
-    
+def test_calorie_calculation_logic(client):
+    """Verify Weight (100kg) * MG Factor (35) = 3500 kcal."""
+    payload = {"program": "Muscle Gain (MG)", "weight": 100}
+    response = client.post('/calculate', json=payload)
     data = response.get_json()
-    # Check for specific Tamil context keywords from your setup_data
-    assert "Balanced Tamil Meals" in data['diet']
-    assert "Idli-Sambar" in data['diet']
-    assert "Rice-Dal" in data['diet']
-
-def test_muscle_gain_diet_tamil_context(client):
-    """Verify that the Muscle Gain (MG) plan returns Tamil-specific diet items."""
-    response = client.get('/get_plan/Muscle%20Gain%20(MG)')
-    assert response.status_code == 200
     
-    data = response.get_json()
-    # Check for specific non-veg Tamil context keywords
+    assert response.status_code == 200
+    assert data['calories'] == 3500
     assert "Chicken Biryani" in data['diet']
-    assert "Mutton Curry" in data['diet']
-    assert "Jeera Rice" in data['diet']
+
+def test_empty_weight_handling(client):
+    """Ensure app handles zero weight gracefully."""
+    payload = {"program": "Beginner (BG)", "weight": 0}
+    response = client.post('/calculate', json=payload)
+    assert response.get_json()['calories'] == "--"
+
+def test_workout_color_assignment(client):
+    """Check if Fat Loss returns the correct e74c3c hex code."""
+    payload = {"program": "Fat Loss (FL)", "weight": 70}
+    response = client.post('/calculate', json=payload)
+    assert response.get_json()['color'] == "#e74c3c"
