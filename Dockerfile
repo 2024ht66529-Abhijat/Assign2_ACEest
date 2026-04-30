@@ -4,7 +4,8 @@ WORKDIR /app
 
 COPY . .
 
-RUN pip install --no-cache-dir flask gunicorn pytest pytest-cov
+# Install all dependencies from requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 ENV FLASK_ENV=production
 
