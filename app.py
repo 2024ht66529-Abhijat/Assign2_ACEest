@@ -32,10 +32,9 @@ def index():
 @app.route('/save_client', methods=['POST'])
 def save_client():
     data = request.json
-    factor = PROGRAMS[data['program']]['factor']
-    calories = int(float(data['weight']) * factor)
-    
     try:
+        factor = PROGRAMS[data['program']]['factor']
+        calories = int(float(data['weight']) * factor)
         with get_db() as conn:
             conn.execute("""INSERT OR REPLACE INTO clients 
                 (name, age, weight, program, calories) VALUES (?, ?, ?, ?, ?)""",
@@ -60,6 +59,12 @@ def save_progress():
         conn.execute("INSERT INTO progress (client_name, week, adherence) VALUES (?, ?, ?)",
                     (data['name'], week, data['adherence']))
     return jsonify({"status": "success", "message": f"Progress logged for {week}"})
+
+@app.route('/get_progress/<name>')
+def get_progress(name):
+    with get_db() as conn:
+        rows = conn.execute("SELECT week, adherence FROM progress WHERE client_name=? ORDER BY id", (name,)).fetchall()
+    return jsonify([dict(row) for row in rows])
 
 if __name__ == '__main__':
     init_db()

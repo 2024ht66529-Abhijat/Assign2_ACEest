@@ -1,33 +1,34 @@
 import pytest
 import sqlite3
+import os
 from app import app, DB_NAME
 
 @pytest.fixture
 def client():
     app.config['TESTING'] = True
+    # Ensure a fresh DB for testing
+    if os.path.exists(DB_NAME): os.remove(DB_NAME)
+    from app import init_db
+    init_db()
+    
     with app.test_client() as client:
-        # Clear DB before each test
-        conn = sqlite3.connect(DB_NAME)
-        conn.execute("DELETE FROM clients")
-        conn.execute("DELETE FROM progress")
-        conn.commit()
-        conn.close()
         yield client
 
 def test_save_and_load_client(client):
-    """Test saving a client and immediately loading them back."""
-    payload = {"name": "Arjun", "age": 25, "weight": 70, "program": "Muscle Gain (MG)"}
-    client.post('/save_client', json=payload)
+    """Test calorie calculation: 100kg * Muscle Gain (35) = 3500."""
+    client.post('/save_client', json={
+        "name": "Arjun", "age": 25, "weight": 100, "program": "Muscle Gain (MG)"
+    })
     
-    response = client.get('/load_client/Arjun')
-    data = response.get_json()
-    
-    assert response.status_code == 200
-    assert data['calories'] == 2450  # 70 * 35
+    rv = client.get('/load_client/Arjun')
+    data = rv.get_json()
+    assert data['calories'] == 3500
 
-def test_save_progress(client):
-    """Test progress logging."""
-    payload = {"name": "Arjun", "adherence": 90}
-    response = client.post('/save_progress', json=payload)
-    assert response.status_code == 200
-    assert "Progress logged" in response.get_json()['message']
+def test_progress_data_retrieval(client):
+    """Test saving and retrieving progress for charting."""
+    client.post('/save_progress', json={"name": "Arjun", "adherence": 85})
+    
+    rv = client.get('/get_progress/Arjun')
+    data = rv.get_json()
+    assert len(data) == 1
+    assert data[0]['adherence'] == 85

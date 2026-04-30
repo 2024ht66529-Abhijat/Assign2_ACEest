@@ -4,8 +4,6 @@ pipeline {
     environment {
         DOCKER_REPO = "2024ht66529/aceestver"
         IMAGE_NAME  = "${DOCKER_REPO}"
-        NODE_PORT   = "30080"
-        PUBLIC_IP   = "172.31.70.181"
         PATH = "/usr/local/bin:${env.PATH}"
     }
 
@@ -113,8 +111,12 @@ pipeline {
         failure {
             script {
                 echo "⚠️ Rollback initiated: Reverting to last stable version..."
-                sh 'kubectl rollout undo deployment/aceestver || true'
-                sh 'kubectl rollout status deployment/aceestver --timeout=300s || true'
+                sh '''
+                    kubectl rollout undo deployment/aceestver || true
+                    kubectl rollout status deployment/aceestver --timeout=300s || true
+                    echo "📜 Recent logs from aceestver pods:"
+                    kubectl logs -l app=aceestver --tail=100 || true
+                '''
             }
         }
     }
